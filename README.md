@@ -329,10 +329,11 @@ print('Mean testing Fisher over last 10% training epochs = ', np.mean(test_F[-in
 
 # Test the network
 
-We create some *real* data which we can use to see how well the network has learned how to summarise the data. When using LISA it is easiest to use<br>
-> `real_data, noise = t.gravitational_wave_burst(0.1, None, return_noise = True, shaped = False)`
-
-> `real_data_shaped = real_data[np.newaxis, np.newaxis, :]`
+We create some *real* data which we can use to see how well the network has learned how to summarise the data. When using LISA it is easiest to use
+```
+real_data, noise = t.gravitational_wave_burst(0.1, None, return_noise = True, shaped = False)
+real_data_shaped = real_data[np.newaxis, np.newaxis, :]
+```
 
 since you want the noise for normalisation and you need a shaped array to feed through the network for summaries.
 
@@ -350,8 +351,10 @@ t.n = n
 
 ## Calculate exact posterior distribution
 
-Since we know how to exactly calculate the posterior distribution for the Gaussian problem we can do that here. If the noise is unknown then a Rao-Blackwell estimation can be made by summing over the posterior with a series of values for the noise. Note that this will not work for the Lyman-α or LISA problems, although the analytic LISA likelihood can be calculated using<br>
-> `posterior = t.lnL_grav(real_data, f, noise)`
+Since we know how to exactly calculate the posterior distribution for the Gaussian problem we can do that here. If the noise is unknown then a Rao-Blackwell estimation can be made by summing over the posterior with a series of values for the noise. Note that this will not work for the Lyman-α or LISA problems, although the analytic LISA likelihood can be calculated using
+```
+posterior = t.lnL_grav(real_data, f, noise)
+```
 
 where  `f` is the central oscillation frequency of interest and noise is the true noise of the real data, used for normalisation in this problem.
 
@@ -380,8 +383,10 @@ plt.ylabel('$\mathcal{P}(\\theta|x)$');
 ![Training the network](https://github.com/tomcharnock/information_maximiser/blob/master/data/2.png)
 
 
-When using LISA the exact likelihood can be calculated for the network summary as well using <br>
-> `network_posterior = t.lnL_grav(real_data_shaped, f, noise, W = W, b = b)`
+When using LISA the exact likelihood can be calculated for the network summary as well using
+```
+network_posterior = t.lnL_grav(real_data_shaped, f, noise, W = W, b = b)
+```
 
 ## First approximation using the network
 
