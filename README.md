@@ -68,29 +68,28 @@ The parameters are<br><br>
 > `SN` -  a float containing the signal to noise of gravitational event. This is not needed when `method` is `Gaussian` or `Lyman-α`.
 
 
-To test with known noisy gaussian noise you can use<br><br>
-> `test_model_parameters = {
+To test with known noisy gaussian noise you can use
+```test_model_parameters = {
     'method': 'Gaussian',
     'fiducial θ': 1.,
     'number of inputs': 10,
     'total number of simulations': 1000,
     'derivative': [1. - 0.1, 1. + 0.1],
     'noise': 1.,
-}`<br>
+}```
 
 For unknown noisy Gaussian noise
-<br><br>
-> `test_model_parameters = {
+```test_model_parameters = {
     'method': 'Gaussian',
     'fiducial θ': 1.,
     'number of inputs': 10,
     'total number of simulations': 1000,
     'derivative': [1. - 0.1, 1. + 0.1],
     'noise': [0., 2.],
-}`<br>
+}```
 
-For the Lyman-α problem considered in the paper use<br><br>
-> `test_model_parameters = {
+For the Lyman-α problem considered in the paper use
+```test_model_parameters = {
     'method': 'Lyman-α',
     'fiducial θ': 1.,
     'total number of simulations': 1000,
@@ -98,10 +97,10 @@ For the Lyman-α problem considered in the paper use<br><br>
     'bin size': 1e-4,
     'z': 2.91,
     'cosmology': None,
-}`<br>
+}```
 
-Finally, for the LISA gravitational waveform problem in the paper use<br><br>
-> `test_model_parameters = {
+Finally, for the LISA gravitational waveform problem in the paper use
+```test_model_parameters = {
     'method': 'LISA',
     'fiducial θ': 0.1,
     'total number of simulations': 1000,
@@ -112,9 +111,9 @@ Finally, for the LISA gravitational waveform problem in the paper use<br><br>
     'Q': 5.,
     't_c': 1e5,
     'SN': 10.,
-}`
+}```
 
-
+Lets consider the simplest model in this example.
 ```python
 test_model_parameters = {
     'method': 'Gaussian',
@@ -174,8 +173,8 @@ The parameters are<br><br>
 
 > `learning rate` - a small float use to dictate the size of steps of the updates of weights and biases after each round of training.
 
-To test with known noisy gaussian noise you can use<br><br>
-> `parameters = {
+To test with known noisy gaussian noise you can use
+```parameters = {
     'total number of simulations': t.tot_sims,
     'number of inputs': t.inputs,
     'number of parameters': 1,
@@ -190,11 +189,10 @@ To test with known noisy gaussian noise you can use<br><br>
     'denominator for the derivative': t.der_den,
     'learning rate': 0.01,
     'parameter direction': False,
-}`<br>
+}```
 
 For unknown noisy Gaussian noise
-<br><br>
-> `parameters = {
+```parameters = {
     'total number of simulations': t.tot_sims,
     'number of inputs': t.inputs,
     'number of parameters': 1,
@@ -209,10 +207,10 @@ For unknown noisy Gaussian noise
     'denominator for the derivative': t.der_den,
     'learning rate': 0.01,
     'parameter direction': False,
-}`<br>
+}```
 
-For the Lyman-α problem considered in the paper use<br><br>
-> `parameters = {
+For the Lyman-α problem considered in the paper use
+```parameters = {
     'total number of simulations': t.tot_sims,
     'number of inputs': t.inputs,
     'number of parameters': 1,
@@ -227,10 +225,10 @@ For the Lyman-α problem considered in the paper use<br><br>
     'denominator for the derivative': t.der_den,
     'learning rate': 1e-2,
     'parameter direction': False,
-}`<br>
+}```
 
-Finally, for the LISA gravitational waveform problem in the paper use<br><br>
-> `parameters = {
+Finally, for the LISA gravitational waveform problem in the paper use
+```parameters = {
     'total number of simulations': t.tot_sims,
     'number of inputs': t.inputs,
     'number of parameters': 1,
@@ -245,9 +243,9 @@ Finally, for the LISA gravitational waveform problem in the paper use<br><br>
     'denominator for the derivative': t.der_den,
     'learning rate': 0.01,
     'parameter direction': False,
-}`
+}```
 
-
+We are using
 ```python
 parameters = {
     'total number of simulations': t.tot_sims,
@@ -307,7 +305,7 @@ plt.ylabel('Fisher information')
 print('Mean training Fisher over last 10% training epochs = ', np.mean(train_F[-int(n_epochs * 0.1):]))
 print('Mean testing Fisher over last 10% training epochs = ', np.mean(test_F[-int(n_epochs * 0.1):]))
 ```
-![Training the network](https://github.com/tomcharnock/information_maximiser/data/1.png "Training the network")
+![Training the network](https://github.com/tomcharnock/information_maximiser/blob/master/data/1.png`)
 
     Mean training Fisher over last 10% training epochs =  4.64849
     Mean testing Fisher over last 10% training epochs =  4.82369
