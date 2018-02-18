@@ -9,8 +9,8 @@ To run this code several packages are needed. <br>
 <br>
 `python-3.6.1`<br>
 `jupyter-4.3.0`<br>
-`tensorflow-1.2.1`<br>
-`numpy-1.13.3`<br>
+`tensorflow-1.5.0`<br>
+`numpy-1.14.0`<br>
 `scipy-0.19.1`<br>
 `tqdm-4.15.0`<br>
 `hmf-3.0.0`<br>

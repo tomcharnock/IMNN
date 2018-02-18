@@ -305,7 +305,7 @@ class network():
         # outmm               TF variable               - difference between output and mean
         # cov                 TF variable               - unbiased covarance
         #______________________________________________________________ 
-        mean = tf.reduce_mean(output, axis = 1, keep_dims = True)
+        mean = tf.reduce_mean(output, axis = 1, keepdims = True)
         outmm = tf.subtract(output, mean)
         cov = tf.divide(tf.einsum('ijk,ijl->ikl', outmm, outmm), (n.n_s - 1.))
         return cov, mean
@@ -710,6 +710,7 @@ class test_models():
         # S_acc            t float     - proof mass acceleration noise
         # S_sn             t float     - LISA shot noise
         # Q                t float     - width of the gravitational waveform
+        # A                t float     - amplitude of gravitational waveform
         # t_c              t float     - time of the gravitational event
         # SN               t float     - signal to noise of gravitational event
         # tot_sims         t int       - total number of simulations to use
@@ -759,6 +760,8 @@ class test_models():
             _ = t.u.check_error(t.S_sn, [float, operator.le, 0.], 'Shot noise should be a positive float')
             t.Q = parameters['Q']
             _ = t.u.check_error(t.Q, [float, operator.le, 0.], 'The gravitational waveform width should be a positive float')
+            t.A = parameters['A']
+            _ = t.u.check_error(t.A, [float, operator.le, 0.], 'The gravitational waveform amplitude should be a positive float')
             t.t_c = parameters['t_c']
             _ = t.u.check_error(t.t_c, [float, operator.le, 0.], 'The burst time should be a positive float')
             t.SN = parameters['SN']
@@ -1181,25 +1184,25 @@ class test_models():
         # S_acc             t float         - proof mass acceleration noise
         # S_sn              t float         - LISA shot noise
         #______________________________________________________________ 
-        # NF                t int           - number of frequency bins
         # N                 t int           - number of real space bins
+        # NF                t int           - number of frequency bins
         # inputs            t int           - number of inputs to the network
         # t                 t array         - time array for plots
         # df                  float         - frequency steps
         # f                 t array         - frequency array
-        # noise               array         - complex noise for random Gaussian field
-        # modes               array         - random field modulated by power spectrum
+        # tπftL               array         - triogometric entry (phase)
         # S_h               t array         - LISA detector noise spectral density
-        t.NF = 1025
-        t.N = int(2 * (t.NF - 1))
+        #______________________________________________________________ 
+        t.N = 2048
+        t.NF = int(t.N/2 + 1)
         t.inputs = t.N
         t.t = np.arange(9.9e4, 9.9e4 + t.N)
-        df = 1. / t.N
+        df = 1. / (2. * t.N)
         t.f = np.linspace(1e-3, df * t.N, t.NF)
         tπftL = 2. * np.pi * t.f * t.t_L
-        t.S_h = 16. * np.sin(tπftL)**2. * (2. * (1. + np.cos(tπftL) + np.cos(tπftL)**2.) * (1. + (1e-4 / t.f)*2.) * t.S_acc / t.f**2. + (1. + np.cos(tπftL) / 2.) * t.S_sn * t.f**2.)   
+        t.S_h = 16. * np.sin(tπftL)**2. * (2. * (1. + np.cos(tπftL) + np.cos(tπftL)**2.) * (1. + (1e-4 / t.f)**2.) * t.S_acc / t.f**2. + (1. + np.cos(tπftL) / 2.) * t.S_sn * t.f**2.)   
        
-    def gravitational_wave_burst(t, θ, _, random_seed = None, return_noise = False, shaped = False):
+    def gravitational_wave_burst(t, θ, _, random_seed = None, shaped = False):
         # CREATES A SINGLE GRAVITATIONAL WAVE BURST
         # called in create_data()
         #           ABC()
@@ -1207,20 +1210,16 @@ class test_models():
         # θ                   float   - central parameter value
         # _                   None    - placeholder for function input
         # random_seed         int     - random seed to spawn the noise with
-        # return_noise        bool    - whether to return the noise
         # shaped              bool    - switch whether to return a shaped array or not
         # NF                t int     - number of frequency bins
         # S_h               t array   - LISA detector noise spectral density
-        # Q                 t float   - width of gravitational wave
-        # t_c               t float   - time of gravitational wave
-        # f                 t array   - frequency array
         # SN                t float   - signal to noise of the detection
         # returns a single simulation of a gravitational wave burst (s)
         #______________________________________________________________
         # noise               array   - complex noise for random Gaussian field
         # modes               array   - random field modulated by power spectrum
         # S_h                 array   - LISA detector noise in real space
-        # h_                  array   - real space gravitational wave signature
+        # h                   array   - Fourier space gravitational wave signature
         # s                   array   - simulation of gravitational wave (with noise)
         #______________________________________________________________
         if random_seed is not None:
@@ -1230,41 +1229,29 @@ class test_models():
         modes[0] = np.sqrt(t.S_h[0]) * noise[0].real
         modes[-1] = np.sqrt(t.S_h[-1]) * noise[-1].real
         modes[1: -1] = noise[1: -1] * np.sqrt(0.5 * t.S_h[1: -1])
-        S_h = np.fft.irfft(modes)
-        S_h /= np.max(t.S_h)
-        h_ = t.gravitational_waveform(θ)
-        h_ *= t.SN * np.abs(S_h[np.argmax(h_)])
-        s = h_ + S_h
-        if return_noise:
-            if shaped:
-                return s[np.newaxis, np.newaxis, :], S_h
-            else:
-                return s, S_h
+        h = t.gravitational_waveform(θ)
+        modes = modes / np.max(np.abs(modes)) * np.max(np.abs(h))
+        s = (np.fft.irfft(t.SN * h) + np.fft.irfft(modes)).real
+        if shaped:
+            return s[np.newaxis, np.newaxis, :]
         else:
-            if shaped:
-                return s[np.newaxis, np.newaxis, :]
-            else:
-                return s
+            return s
 
     def gravitational_waveform(t, θ):
         # CALCULATES GRAVITATIONAL WAVEFORM AT CENTRAL FRENQUENCY
         # called in gravitational_wave_burst()
         #           lnL_grav()
         # θ                   float   - central parameter value
-        # norm                float   - value to normalise array to
         # Q                 t float   - width of gravitational wave
+        # A                 t float   - amplitude of gravitational wave
         # t_c               t float   - time of gravitational wave
         # f                 t array   - frequency array
         # returns a real space gravitational waveform
         #______________________________________________________________
         # h                   array   - Fourier space gravitational waveform
         #______________________________________________________________
-        h = np.sqrt(t.Q**2. / (2. * np.pi * θ**2)) * np.exp(-0.5 * t.Q**2. * ((t.f - θ) / θ)**2) * np.exp(2. * np.pi * np.complex(0., 1.) * t.t_c * t.f) 
-        h_ = np.fft.irfft(h)
-        h_max = np.max(h_)
-        if h_max != 0.:
-            h_ /= np.max(h_)
-        return h_
+        h = t.A * t.Q / t.f * np.exp(-0.5 * t.Q**2. * ((t.f - θ) / θ)**2.) * np.exp(2. * np.pi * np.complex(0., 1.) * t.t_c * t.f)
+        return h
 
     def ABC(t, W, b, F, real_data, prior, num_thetas, noise = None, real_summary = False, PMC = False, log = False):
         # APPROXIMATE BAYESIAN COMPUTATION WITH RANDOM DRAWS FROM PRIOR
@@ -1489,18 +1476,25 @@ class test_models():
         #______________________________________________________________              
         return (-0.5 * nd * np.log(2. * np.pi * (s12 + s22)) - 0.5 * real_summary / (s12 + s22))
     
-    def lnL_grav(t, real_data, prior, noise, W = None, b = None):
+    def lnL_grav(t, real_data, prior, W = None, b = None, MOPED = None):
         # CALCULATE THE LOG LIKELIHOOD OF THE GRAVITATIONAL WAVE CENTRAL FREQUENCY
         # real_data    array            - real data to do network comparison with
         # prior        array            - values of the central values to be evaluated
-        # noise        array            - noise of real data to normalise waveform with
+        # W            list             - the weights for the network
+        # b            list             - the biases for the network
+        # MOPED        array            - MOPED compression vector
         # returns the log likelihood of the real summary
-        #______________________________________________________________              
-        # C           float             - normalisation parameter
-        # lnL         array             - log likelihood at parameter values
-        # ind         int               - frequency counting parameter
-        # h_          array             - gravitational waveform in real space
-        # smh_        array             - difference between real data and waveform
+        #______________________________________________________________ 
+        # session     tf session        - initialise the tensorflow session
+        # graph       tf graph          - the neural network
+        # dictionory     dict           - feed dictionary for the network
+        # real           array          - the real data (can be compressed using MOPED or the network)
+        # C              float          - normalisation parameter
+        # lnL            array          - log likelihood at parameter values
+        # ind            int            - frequency counting parameter
+        # h_             array          - gravitational waveform in real space
+        # waveform       array          - h_ (can be compressed using MOPED or the network)
+        # smh_           array          - difference between real data and waveform
         #______________________________________________________________              
         if (W is not None) and (b is not None):
             session, graph, dictionary = t.n.resetup(W, b)
@@ -1511,13 +1505,15 @@ class test_models():
         C = 0.
         lnL = np.zeros(prior.shape)
         for ind in range(len(prior)):
-            h_ = t.gravitational_waveform(prior[ind])
-            h_ *= t.SN * np.abs(noise[np.argmax(h_)])
+            h_ = np.fft.irfft(t.SN * t.gravitational_waveform(prior[ind])).real
             if (W is not None) and (b is not None):
                 dictionary[graph.get_tensor_by_name('x:0')] = h_[np.newaxis, np.newaxis, :]
                 waveform = session.run(t.n.a, feed_dict = dictionary)[-1][0, 0, 0]
-            else:
+            elif MOPED is None:
                 waveform = h_
+            else:
+                real = np.dot(MOPED, real)
+                waveform = np.dot(MOPED, h_)
             smh_ = real - waveform
             lnL[ind] = C - np.dot(smh_, smh_) / 2.
         return lnL
