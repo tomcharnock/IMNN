@@ -1,0 +1,5 @@
+data/Gaussian.pkl filter=lfs diff=lfs merge=lfs -text
+data/Lyman_α.pkl filter=lfs diff=lfs merge=lfs -text
+data/LISA.pkl filter=lfs diff=lfs merge=lfs -text
+data/Gaussian_known_noise_or_wrong_fiducial_value.pkl filter=lfs diff=lfs merge=lfs -text
+data/Gaussian_unknown_noise.pkl filter=lfs diff=lfs merge=lfs -text
