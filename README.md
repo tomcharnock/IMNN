@@ -66,6 +66,8 @@ The parameters are<br><br>
 > `S_sn` - a float of the value of the LISA shot noise. This is not needed when `method` is `Gaussian` or `Lyman-α`.
 
 > `Q` - a float of the width of the gravitational waveform. This is not needed when `method` is `Gaussian` or `Lyman-α`.
+ 
+> `A` - a float of the amplitude of the gravitational waveform. This is not needed when `method` is Gaussian` or `Lyman-α`.
 
 > `t_c` - a float of the time of the gravitational event. This is not needed when `method` is `Gaussian` or `Lyman-α`.
 
@@ -115,13 +117,14 @@ test_model_parameters = {
     'method': 'LISA',
     'fiducial θ': 0.1,
     'total number of simulations': 1000,
-    'derivative': [0.1 - 0.05, 0.1 + 0.2],
+    'derivative': [0.1 - 0.0325, 0.1 + 0.1],
     't_L': 16.678,
     'S_acc': 2.5e-48,
     'S_sn': 1.8e-37,
     'Q': 5.,
+    'A': 3.5,
     't_c': 1e5,
-    'SN': 10.,
+    'SN': 34.,
 }
 ```
 
@@ -252,15 +255,15 @@ parameters = {
     'number of inputs': t.inputs,
     'number of parameters': 1,
     'number of combinations': 2,
-    'differentiation fraction': 1.,
+    'differentiation fraction': 0.1,
     'number of batches': 1,
-    'hidden layers': [1024, 512, 256, 128, 64],
+    'hidden layers': [10, 10, 10, 10, 10],
     'biases bias': 0.1,
-    'activation function': 'tanh',
+    'activation function': 'relu',
     'alpha': 0.01,
-    'dropout': 0.,
+    'dropout': 0.1,
     'denominator for the derivative': t.der_den,
-    'learning rate': 0.01,
+    'learning rate': 0.00001,
     'parameter direction': False,
 }
 ```
@@ -357,10 +360,10 @@ t.n = n
 
 Since we know how to exactly calculate the posterior distribution for the Gaussian problem we can do that here. If the noise is unknown then a Rao-Blackwell estimation can be made by summing over the posterior with a series of values for the noise. Note that this will not work for the Lyman-α or LISA problems, although the analytic LISA likelihood can be calculated using
 ```
-posterior = t.lnL_grav(real_data, f, noise)
+posterior = t.lnL_grav(real_data, f, C = None, W = None, b = None, derivative_diff = None, MOPED = None)
 ```
 
-where  `f` is the central oscillation frequency of interest and noise is the true noise of the real data, used for normalisation in this problem.
+where  `f` is the values of the central oscillation frequency to evaluate the likelihood at. `C` is a scaling factor, `W` and `b` are the weights and `derivative_diff` are the weights, biases and a list containing the lower, upper derivative values and their difference. `MOPED` is the compression parameter. Leaving all the optional parameters as `None` will result in the likelihood using all the data, providing the `MOPED` parameter will perform MOPED compression and all three of `W`, `b` and `derivative_diff` are needed for IMNN compression.
 
 
 ```python
