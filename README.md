@@ -3,7 +3,9 @@
 
 Using neural networks, sufficient statistics can be obtained from data by maximising the Fisher information.
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.1175196.svg)](https://doi.org/10.5281/zenodo.1175196) (arXiv:1802.03537)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.1175196.svg)](https://doi.org/10.5281/zenodo.1175196) 
+
+Citing arXiv:1802.03537 is a condition of use of this code for any publication.
 
 To run this code several packages are needed. <br>
 <br>
