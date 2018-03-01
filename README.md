@@ -525,3 +525,59 @@ plt.ylabel('$\mathcal{P}(\\theta|x)$');
 
 ![Training the network](https://github.com/tomcharnock/information_maximiser/blob/master/data/6.png)
 
+## Different network architectures
+
+The IMNN is built as a fully-connected artificial neural network, but sometimes other network architectures will be preferable. These can be very easily accomodated by passing a TensorFlow tensor to the IMNN. For example, if there is some translationally invariant 2D array with shape `[28, 28, 1]` which is dependent on only one parameter, we could choose to use a convolutional neural network by using
+
+
+```python
+n_train = 2
+n_s = int(tot_sims / n_train)
+diff_frac = 0.1
+n_p = int(n_s * diff_frac)
+n_batches = 1
+n_spp = n_s + 2 * (n_params * n_p)
+shape = [28, 28, 1]
+
+x = tf.placeholder(tf.float32, shape = [n_batches, n_spp] + shape, name = 'x')
+input_layer = tf.reshape(x, [n_batches * n_spp] + shape)
+convolution_1 = tf.layers.conv2d(inputs = input_layer, filters = 32, kernel_size = [5, 5], padding = "same", activation = tf.nn.relu)
+pool_1 = tf.layers.max_pooling2d(inputs = convolution_1, pool_size = [2, 2], strides = 2)
+convolution_2 = tf.layers.conv2d(inputs = pool_1, filters = 64, kernel_size = [5, 5], padding = "same", activation = tf.nn.relu)
+pool_2 = tf.layers.max_pooling2d(inputs = convolution_2, pool_size = [2, 2], strides = 2)
+pool_2_flat = tf.reshape(pool2, [n_batches, n_spp, int(np.prod(pool_2.get_shape().as_list()[1:]))])
+```
+
+Here `tot_sims` is the total number of simulations which will be passed to the network, and `diff_frac` is the fraction of the simulations used for the numerical derivative. `n_train` is the number of combinations to split the data into and `n_batches` is the number of combinations to process as one batch.
+
+The network is then initialised as before, where `parameters['number of inputs']` must be the size of the flattened output of the custom network and the output tensor of the custom network must be passed to `n.setup()`.
+
+```python
+parameters = {
+    'total number of simulations': tot_sims,
+    'number of inputs': int(np.prod(pool_2.get_shape().as_list()[1:])),
+    'number of parameters': 1,
+    'number of combinations': n_train,
+    'differentiation fraction': diff_frac,
+    'number of batches': n_batches,
+    'hidden layers': None,
+    'biases bias': 0.1,
+    'activation function': 'relu',
+    'alpha': 0.1,
+    'dropout': 0.1,
+    'denominator for the derivative': der_den,
+    'learning rate': 0.01,
+    'parameter direction': False,
+}
+n = inf_max.network(parameters)
+n.setup(pool_2_flat)
+```
+
+Training is then identical to before using 
+
+```python
+n_epochs = 1000
+train_F, test_F, F_arr, W, b = n.train(train_data, n_epochs, test_data = test_data)
+```
+
+A custom architecture can also be used as an input to a fully-connected artificial neural network by supplying `parameters['hidden layers'] = [size_of_first_layer, size_of_second_layer, etc.]`. `parameters['number of inputs']` still needs to be the size of the output of the flatten custom network.

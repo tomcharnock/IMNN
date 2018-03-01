@@ -70,40 +70,45 @@ class network():
             sys.exit()
         else:
             n.activation = act_dict[parameters['activation function']]
-        if (type(parameters['hidden layers']) != list):
-            print('The architecture must be a list of layers with the number of nodes in each layer')
-            sys.exit()
-        if (len(parameters['hidden layers']) <= 0):
-            print('The number of hidden layers must be positive')
-            sys.exit()
-        if any(type(i) != int for i in parameters['hidden layers']):
-            print('The number of neurons in each layer must be a positive integer')
-            sys.exit()
-        if any(i <= 0 for i in parameters['hidden layers']):
-            print('The number of neurons in each layer must be a positive integer')
-            sys.exit()
-        n.l = [n.inputs] + parameters['hidden layers'] + [n.n_params]    
+        if parameters['hidden layers'] is not None:
+            if (type(parameters['hidden layers']) != list):
+                print('The architecture must be a list of layers with the number of nodes in each layer')
+                sys.exit()
+            if (len(parameters['hidden layers']) <= 0):
+                print('The number of hidden layers must be positive')
+                sys.exit()
+            if any(type(i) != int for i in parameters['hidden layers']):
+                print('The number of neurons in each layer must be a positive integer')
+                sys.exit()
+            if any(i <= 0 for i in parameters['hidden layers']):
+                print('The number of neurons in each layer must be a positive integer')
+                sys.exit()
+            n.l = [n.inputs] + parameters['hidden layers'] + [n.n_params]    
+        else:
+            n.l = [n.inputs, n.n_params]
         n.der_den_ = parameters['denominator for the derivative']
         n.n_sp = n.n_s + n.n_params * n.n_p
         n.n_spp = n.n_sp + n.n_params * n.n_p
         n.n_pp = n.n_p * n.n_params
         n.partial_sims = n.n_train * n.n_p
  
-    def setup(n):
+    def setup(n, external_graph = None):
         # SETUP NEURAL NETWORK ARCHITECTURE
+        # external_graph       TF graph                            - external architecture to use before IMNN
         #______________________________________________________________
-        # feedforward(x, W, b, dropped)   (a, dadv)            - feedforward inputs to get outputs and derivatives
-        # fisher(a[-1])                   (|F|, cov)           - calculate determinant of Fisher and covariance from last layer
-        # central_values(a, dadv)         (a_, dadv_)          - unpack simulations to get only the non-derivative-sim outputs
+        # feedforward(x, W, b, dropped)   (a, dadv)                - feedforward inputs to get outputs and derivatives
+        # fisher(a[-1])                   (|F|, cov)               - calculate determinant of Fisher and covariance from last layer
+        # central_values(a, dadv)         (a_, dadv_)              - unpack simulations to get only the non-derivative-sim outputs
         # backpropagate_and_update(W, b, a_, dadv_, |F|, cov, dropped)
-        #                                 (weights_and_biases) - update weights and biases using Fisher information as loss
-        # session(training_graph)         (training_session)   - initialise TensorFlow session for training
+        #                                 (weights_and_biases)     - update weights and biases using Fisher information as loss
+        # session(training_graph)         (training_session)       - initialise TensorFlow session for training
         #______________________________________________________________
         # training_graph     n TF obj                              - TensorFlow graph for training the network
         # W                    list (TF variable)                  - neural network weights
         # b                    list (TF variable)                  - neural network biases
         # dropped              list (TF placeholder)               - holder for which neurons to drop
-        # x                    list (TF placeholder)               - holder for network input
+        # IMNN_input           TF placeholder                      - holder for IMNN input
+        # x                    TF placeholder                      - holder for IMNN input
         # l                    int                                 - layer counting variable
         # a                    list (TF tensor)                    - activated outputs at every neuron
         # dadv                 list (TF tensor)                    - derivative of activated output at every neuron
@@ -114,26 +119,33 @@ class network():
         # weights_and_biases n list [|F|, W, b]                    - list with training outputs
         # train_session      n TF session                          - initialised TensorFlow session
         #______________________________________________________________
-        n.training_graph = tf.Graph()
+        if external_graph is not None:
+            n.training_graph = tf.get_default_graph()
+        else:
+            n.training_graph = tf.Graph()
         with n.training_graph.as_default() as g:
             W = []
             b = []
             dropped = []
-            x = tf.placeholder(n._FLOATX, shape = [None, n.n_spp, n.l[0]], name = 'x')
+            if external_graph is not None:
+                IMNN_input = tf.identity(external_graph)
+            else:
+                x = tf.placeholder(n._FLOATX, shape = [n.n_batches, n.n_spp, n.l[0]], name = 'x')
+                IMNN_input = x
             for l in range(len(n.l) - 1):
                 W.append(tf.Variable(tf.truncated_normal([n.l[l], n.l[l + 1]], mean = 0., stddev = tf.divide(tf.sqrt(2.), n.l[l]), dtype = n._FLOATX)))
                 b.append(tf.Variable(tf.constant(n.b_bias, shape = [n.l[l + 1]], dtype = n._FLOATX)))
                 dropped.append(tf.placeholder(n._FLOATX, shape = [n.l[l + 1]], name = 'd_' + str(l)))
-            a, dadv = n.feedforward(x, W, b, dropped)
+            a, dadv = n.feedforward(IMNN_input, W, b, dropped)
             n.IFI, cov = n.fisher(a[-1])
             a_, dadv_ = n.central_values(a, dadv)
             n.weights_and_biases = n.backpropagate_and_update(W, b, a_, dadv_, n.IFI, cov, dropped)
         n.train_session = n.session(n.training_graph)
         
-    def feedforward(n, x, W, b, dropped):
+    def feedforward(n, inp, W, b, dropped):
         # FEEDFORWARD ALGORITHM
         # called from setup()
-        # x                    list (TF placeholder)  - holder for network input
+        # inp                  TF placeholder         - holder for network input
         # W                    list (TF variable)     - neural network weights
         # b                    list (TF variable)     - neural network biases
         # dropped              list (TF placeholder)  - holder for which neurons to drop
@@ -152,10 +164,10 @@ class network():
         dadv = []
         for l in range(len(n.l) - 1):
             if l == 0:
-                a.append(x)
-                dadv.append(x)
+                a.append(inp)
+                dadv.append(inp)
             v = tf.add(tf.einsum('ijk,kl->ijl', a[l], W[l]), b[l])
-            a_, dadv_ = n.activation(v, l, dropped) #eval('n.' + n.activation + "(v, l, dropped)")
+            a_, dadv_ = n.activation(v, l, dropped)
             a.append(a_)
             dadv.append(dadv_)
         return a, dadv 
@@ -484,6 +496,7 @@ class network():
         # returns data arranged for the network (epoch)
         #______________________________________________________________
         # n_train              int                        - number of combinations to split training set into
+        # input_shape.         list                       - list of the shape of the input array to the network
         # epoch                array                      - data arranged for the network
         # unpack_m             array                      - low simulation selection
         # unpack_p             array                      - high simulation selection
@@ -495,11 +508,15 @@ class network():
             n_train = n.n_train
         else:
             n_train = 1
-        epoch = np.zeros([n_train, n.n_spp, n.l[0]])
+        #epoch = np.zeros([n_train, n.n_spp, n.l[0]])
+        input_shape = n.training_graph.get_tensor_by_name('x:0').get_shape().as_list()
+        epoch = np.zeros([n_train] + input_shape[1:])
         for train in range(n_train):
             epoch[train, : n.n_s] = data[0][train: n.tot_sims: n_train]
-            unpack_m = np.zeros([n.n_pp, n.l[0]])
-            unpack_p = np.zeros([n.n_pp, n.l[0]])
+            #unpack_m = np.zeros([n.n_pp, n.l[0]])
+            unpack_m = np.zeros([n.n_pp] + input_shape[2:])
+            #unpack_p = np.zeros([n.n_pp, n.l[0]])
+            unpack_p = np.zeros([n.n_pp] + input_shape[2:])
             for param in range(n.n_params):
                 low = param * n.n_p
                 high = low + n.n_p
