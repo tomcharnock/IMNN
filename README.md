@@ -549,7 +549,8 @@ pool_2_flat = tf.reshape(pool2, [n_batches, n_spp, int(np.prod(pool_2.get_shape(
 ```
 
 Here `tot_sims` is the total number of simulations which will be passed to the network, and `diff_frac` is the fraction of the simulations used for the numerical derivative. `n_train` is the number of combinations to split the data into and `n_batches` is the number of combinations to process as one batch.
-The network is then initialised as before, where `parameters['number of inputs']` must be the size of the flattened output of the network to be used and the flatted tensor must be passed to `n.setup()`.
+
+The network is then initialised as before, where `parameters['number of inputs']` must be the size of the flattened output of the custom network and the output tensor of the custom network must be passed to `n.setup()`.
 
 ```python
 parameters = {
@@ -579,4 +580,4 @@ n_epochs = 1000
 train_F, test_F, F_arr, W, b = n.train(train_data, n_epochs, test_data = test_data)
 ```
 
-A custom architecture can also be used as an input to a fully-connected artificial neural network by supplying `parameters['hidden layers'] = [size_of_first_layer, size_of_second_layer, etc.]`. `parameters['number of inputs']` still needs to be the size of the output of the flatten custom tensor.
+A custom architecture can also be used as an input to a fully-connected artificial neural network by supplying `parameters['hidden layers'] = [size_of_first_layer, size_of_second_layer, etc.]`. `parameters['number of inputs']` still needs to be the size of the output of the flatten custom network.
