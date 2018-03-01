@@ -1230,8 +1230,10 @@ class test_models():
         modes[-1] = np.sqrt(t.S_h[-1]) * noise[-1].real
         modes[1: -1] = noise[1: -1] * np.sqrt(0.5 * t.S_h[1: -1])
         h = t.gravitational_waveform(θ)
-        modes = modes / np.max(np.abs(modes)) * np.max(np.abs(h))
-        s = (np.fft.irfft(t.SN * h) + np.fft.irfft(modes)).real
+        h_ = np.fft.irfft(h)
+        modes_ = np.fft.irfft(modes)
+        modes_ = modes_ / np.abs(modes_[np.argmax(h_)]) * np.max(np.abs(h_))
+        s = (h_ + modes_ / t.SN).real
         if shaped:
             return s[np.newaxis, np.newaxis, :]
         else:
@@ -1476,10 +1478,11 @@ class test_models():
         #______________________________________________________________              
         return (-0.5 * nd * np.log(2. * np.pi * (s12 + s22)) - 0.5 * real_summary / (s12 + s22))
     
-    def lnL_grav(t, real_data, prior, W = None, b = None, MOPED = None):
+    def lnL_grav(t, real_data, prior, C = 0., W = None, b = None, derivative_diff = None, MOPED = None):
         # CALCULATE THE LOG LIKELIHOOD OF THE GRAVITATIONAL WAVE CENTRAL FREQUENCY
         # real_data    array            - real data to do network comparison with
         # prior        array            - values of the central values to be evaluated
+        # C            float            - offset parameter for log-likelihood
         # W            list             - the weights for the network
         # b            list             - the biases for the network
         # MOPED        array            - MOPED compression vector
@@ -1489,33 +1492,40 @@ class test_models():
         # graph       tf graph          - the neural network
         # dictionory     dict           - feed dictionary for the network
         # real           array          - the real data (can be compressed using MOPED or the network)
-        # C              float          - normalisation parameter
         # lnL            array          - log likelihood at parameter values
         # ind            int            - frequency counting parameter
         # h_             array          - gravitational waveform in real space
         # waveform       array          - h_ (can be compressed using MOPED or the network)
         # smh_           array          - difference between real data and waveform
         #______________________________________________________________              
-        if (W is not None) and (b is not None):
+        if (W is not None) and (b is not None) and (derivative_diff is not None):
             session, graph, dictionary = t.n.resetup(W, b)
             dictionary[graph.get_tensor_by_name('x:0')] = real_data
             real = session.run(t.n.a, feed_dict = dictionary)[-1][0, 0, 0]
+            dictionary[graph.get_tensor_by_name('x:0')] = np.fft.irfft(t.gravitational_waveform(derivative_diff[0])).real[np.newaxis, np.newaxis, :]
+            h_m = session.run(t.n.a, feed_dict = dictionary)[-1][0, 0, 0]
+            dictionary[graph.get_tensor_by_name('x:0')] = np.fft.irfft(t.gravitational_waveform(derivative_diff[1])).real[np.newaxis, np.newaxis, :]
+            h_p = session.run(t.n.a, feed_dict = dictionary)[-1][0, 0, 0]
+            diff = h_p - h_m / derivative_diff[2]
+            cov = diff**-2.
+        elif (MOPED is not None):
+            real = np.dot(MOPED, real_data)
+            cov = 1.
         else:
             real = real_data
-        C = 0.
+            cov = np.identity(real.shape[0])
         lnL = np.zeros(prior.shape)
         for ind in range(len(prior)):
-            h_ = np.fft.irfft(t.SN * t.gravitational_waveform(prior[ind])).real
-            if (W is not None) and (b is not None):
+            h_ = np.fft.irfft(t.gravitational_waveform(prior[ind])).real
+            if (W is not None) and (b is not None) and (derivative_diff is not None):
                 dictionary[graph.get_tensor_by_name('x:0')] = h_[np.newaxis, np.newaxis, :]
                 waveform = session.run(t.n.a, feed_dict = dictionary)[-1][0, 0, 0]
-            elif MOPED is None:
-                waveform = h_
-            else:
-                real = np.dot(MOPED, real)
+            elif (MOPED is not None):
                 waveform = np.dot(MOPED, h_)
+            else:
+                waveform = h_
             smh_ = real - waveform
-            lnL[ind] = C - np.dot(smh_, smh_) / 2.
+            lnL[ind] = C - np.dot(smh_, np.dot(cov, smh_)) / 2.
         return lnL
         
 class utils():
