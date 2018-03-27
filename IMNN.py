@@ -14,8 +14,6 @@ class IMNN():
         # check_params(dict)                      - checks that all necessary parameters are in dictionary
         # isboolean(list)               bool      - checks that parameter is a boolean
         # positive_integer(list)        int       - checks that parameter is a positive integer
-        # number_of_simulations_per_combination(class)
-        #                               int       - calculates the number of simulations to use
         # number_of_derivative_simulations(dict, class)
         #                                         - calculates the number of simulations to use for numerical derivative
         # inputs(dict)                  int/list  - checks shape of network input
@@ -32,9 +30,7 @@ class IMNN():
         # u                             class     - utility functions
         # _FLOATX                     n tf type   - set TensorFlow types to 32 bit (for GPU)
         # verbose                     n bool      - True to print outputs such as shape of tensors
-        # tot_sims                    n int       - total number of simulations to use
         # n_params                    n int       - number of parameters in the model
-        # n_train                     n int       - number of combinations to split training set
         # n_s                         n int       - number of simulations in each combination
         # n_p                         n int       - number of differentiation simulations
         # n_summaries                 n int       - number of outputs from the network
@@ -64,14 +60,11 @@ class IMNN():
         n._FLOATX = tf.float32
         u.check_params(parameters)
         n.verbose = u.isboolean([parameters, 'verbose'])
-        n.tot_sims = u.positive_integer([parameters, 'total number of simulations'])
+        n.n_s = u.positive_integer([parameters, 'number of simulations'])
         n.n_params = u.positive_integer([parameters, 'number of parameters'])
-        n.n_train = u.positive_integer([parameters, 'number of combinations'])
-        n.n_s = u.number_of_simulations_per_combination(n)
         n.n_p = u.number_of_derivative_simulations(parameters, n)
         n.n_summaries = u.positive_integer([parameters, 'number of summaries'])
         n.inputs = u.inputs(parameters)
-        n.η = u.isfloat([parameters,'η'])
         n.prebuild = u.isboolean([parameters, 'prebuild'])
         if n.prebuild:
             u.check_prebuild_params(parameters)
@@ -110,6 +103,7 @@ class IMNN():
         #______________________________________________________________
         # RETURNS
         # tensor
+        # activated dense output (with dropout)
         #______________________________________________________________
         # INPUTS
         # input_tensor                  tensor    - input tensor to the dense layer
@@ -152,6 +146,7 @@ class IMNN():
         #______________________________________________________________
         # RETURNS
         # tensor
+        # activated convolutional output (with dropout)
         #______________________________________________________________
         # INPUTS
         # input_tensor                  tensor    - input tensor to the convolutional layer
@@ -194,6 +189,7 @@ class IMNN():
         #______________________________________________________________
         # RETURNS
         # tensor
+        # last tensor of the IMNN architecture (summarised output)
         #______________________________________________________________
         # FUNCTIONS (DEFINED IN IMNN.py)
         # dense(tensor, int, tensor)    tensor    - calculates a dense layer
@@ -236,6 +232,7 @@ class IMNN():
         #______________________________________________________________
         # RETURNS
         # tensor
+        # Fisher information matrix
         #______________________________________________________________
         # INPUTS
         # a                             tensor    - network output for simulations at fiducial parameter value
@@ -279,13 +276,14 @@ class IMNN():
         return F
     
     def loss(n, F):
-        # CALCULATE THE LOSS FUNCTION (-0.5 * |F|^2)
+        # CALCULATE THE LOSS FUNCTION
         #______________________________________________________________
         # CALLED FROM (DEFINED IN IMNN.py)
         # setup(optional func)                    - builds generic or auto built network
         #______________________________________________________________
         # RETURNS
         # tensor
+        # loss function (-0.5 * |F|^2)
         #______________________________________________________________
         # INPUTS
         # F                           n tensor    - Fisher information matrix
@@ -297,7 +295,7 @@ class IMNN():
         IFI = tf.matrix_determinant(F)
         return tf.multiply(tf.constant(-0.5, dtype = n._FLOATX), tf.square(IFI))
         
-    def setup(n, network = None):
+    def setup(n, η, network = None):
         # SETS UP GENERIC NETWORK
         #______________________________________________________________
         # FUNCTIONS (DEFINED IN IMNN.py)
@@ -305,12 +303,14 @@ class IMNN():
         # Fisher(tensor, tensor, tensor, tensor)
         #                               tensor    - calculates Fisher information
         # loss(tensor)                  tensor    - calculates loss function
+        # training_scheme(float)        float     - defines the minimisation scheme for backpropagation
         # begin_session()                         - starts interactive tensorflow session and initialises variables
         #______________________________________________________________
         # FUNCTIONS (DEFINED IN utils.py)
         # to_prebuild(func)                       - checks whether network builder is provided 
         #______________________________________________________________
         # INPUTS
+        # η                             float     - learning rate
         # network              optional func      - externally provided function for building network 
         # inputs                      n int/list  - number of inputs (int) or shape of input (list)
         # n_params                    n int       - number of parameters in the model
@@ -326,7 +326,6 @@ class IMNN():
         # output_m                      tensor    - network output for simulations below fiducial parameter value
         # output_p                      tensor    - network output for simulations above fiducial parameter value
         # F                           n tensor    - Fisher information matrix
-        # backpropagate               n tf opt    - minimisation scheme for the network
         #______________________________________________________________ 
         n.x = tf.placeholder(n._FLOATX, shape = [None] + n.inputs)
         n.x_m = tf.placeholder(n._FLOATX, shape = [None] + n.inputs)
@@ -345,10 +344,29 @@ class IMNN():
             scope.reuse_variables()
             output_p = network(n.x_p, n.dropout)
         n.F = n.Fisher(n.output, output_m, output_p, n.dd)
-        n.backpropagate = tf.train.GradientDescentOptimizer(n.η).minimize(n.loss(n.F))
+        n.training_scheme(η)
         n.begin_session()
+        
+    def training_scheme(n, η):
+        # MINIMISATION SCHEME FOR BACKPROPAGATION
+        #______________________________________________________________
+        # FUNCTIONS (DEFINED IN IMNN.py)
+        # loss(tensor)                  tensor    - calculates loss function
+        #______________________________________________________________
+        # FUNCTIONS (DEFINED IN utils.py)
+        # isfloat(list)                 float     - checks that parameter is a float
+        #______________________________________________________________
+        # INPUTS
+        # η                             float     - learning rate
+        # F                           n tensor    - Fisher information matrix
+        #______________________________________________________________
+        # VARIABLES
+        # backpropagate               n tf opt    - minimisation scheme for the network
+        #______________________________________________________________ 
+        η = utils.utils().isfloat(η, key = 'η')
+        n.backpropagate = tf.train.GradientDescentOptimizer(η).minimize(n.loss(n.F))
 
-    def shuffle(n, data, data_m, data_p):
+    def shuffle(n, data, data_m, data_p, n_train):
         # SHUFFLES DATA
         #______________________________________________________________
         # CALLED FROM (DEFINED IN IMNN.py)
@@ -362,9 +380,9 @@ class IMNN():
         # data                          array     - data at fiducial parameter value
         # data_m                        array     - data below fiducial parameter value
         # data_p                        array     - data above fiducial parameter value
-### n_params                    n int       - number of parameters in the model
+        # n_train                       int       - number of combinations to split training set into
+# NEED TO CHECK MULTIPLE PARAMS # n_params                    n int       - number of parameters in the model
         # n_s                         n int       - number of simulations in each combination
-        # n_train                     n int       - number of combinations to split training set into
         # n_p                         n int       - number of differentiation simulations in each combination
         #______________________________________________________________
         # VARIABLE
@@ -374,15 +392,15 @@ class IMNN():
         # d_m                           array     - shuffled lower fiducial parameter data
         # d_p                           array     - shuffled upper fiducial parameter data
         #______________________________________________________________ 
-        full_shuffle = np.arange(n.n_s * n.n_train)
+        full_shuffle = np.arange(n.n_s * n_train)
         np.random.shuffle(full_shuffle)
-        full_shuffle = full_shuffle.reshape(n.n_train, n.n_s)
-        d = np.array([data[full_shuffle[i]] for i in range(n.n_train)])
-        partial_shuffle = np.arange(n.n_p * n.n_train)
+        full_shuffle = full_shuffle.reshape(n_train, n.n_s)
+        d = np.array([data[full_shuffle[i]] for i in range(n_train)])
+        partial_shuffle = np.arange(n.n_p * n_train)
         np.random.shuffle(partial_shuffle)
-        partial_shuffle = partial_shuffle.reshape(n.n_train, n.n_p)
-        d_m = np.array([data_m[partial_shuffle[i]] for i in range(n.n_train)])
-        d_p = np.array([data_p[partial_shuffle[i]] for i in range(n.n_train)])
+        partial_shuffle = partial_shuffle.reshape(n_train, n.n_p)
+        d_m = np.array([data_m[partial_shuffle[i]] for i in range(n_train)])
+        d_p = np.array([data_p[partial_shuffle[i]] for i in range(n_train)])
         return d, d_m, d_p
     
     def get_combination_data(n, data, combination, n_batches):
@@ -420,7 +438,7 @@ class IMNN():
         t_p = t_p_.reshape([np.prod(t_p_.shape[:2])] + list(t_p_.shape[2:]))      
         return t, t_m, t_p
         
-    def train(n, train_data, num_epochs, num_batches, keep_rate, der_den, test_data = None):
+    def train(n, train_data, num_epochs, n_train, num_batches, keep_rate, der_den, test_data = None):
         # TRAIN INFORMATION MAXIMISING NEURAL NETWORK
         #______________________________________________________________
         # RETURNS
@@ -434,19 +452,22 @@ class IMNN():
         #                                         - gets individual combination of data
         #______________________________________________________________
         # FUNCTIONS (DEFINED IN utils.py)
-        # to_test(list)                 bool      - checks whether to use test data
-        # check_batches(int, int)                 - checks number of batches is less than n_train and makes use of all data
+        # check_data(class, list, int, optional bool)
+        #                               bool      - checks whether data is of correct format (and whether to use test data)
+        # positive_integer(list)        int       - checks that parameter is a positive integer
+        # enough(int, int, optional bool, optional bool)
+        #                                         - checks number of batches is less than n_train and makes use of all data
         # constrained_float(float, string)
         #                               float     - checks the dropout is between 0 and 1
         #______________________________________________________________
         # INPUTS
         # train_data                    list      - data at fiducial, lower and upper parameter values
         # num_epochs                    int       - number of epochs to train
+        # n_train                       int       - number of combinations to split training set into
         # num_batches                   int       - number of batches to process at once
         # keep_rate                     float     - keep rate for dropout
         # der_den                       array     - inverse difference between upper and lower parameter values
         # test_data            optional list      - data at fiducial, lower and upper parameter values for testing
-        # n_train                     n int       - number of combinations to split training set into
         # sess                        n session   - interactive tensorflow session (with initialised parameters)
         # backpropagate               n tf opt    - minimisation scheme for the network 
         # x                           n tensor    - fiducial simulation input tensor
@@ -466,20 +487,26 @@ class IMNN():
         # t_m                           array     - more reshaped single combination of data below fiducial parameter value
         # t_p                           array     - more reshaped single combination of data above fiducial parameter value
         #______________________________________________________________ 
-        do_test = utils.utils().to_test(test_data)
-        utils.utils().enough(n.n_train, num_batches, modulus = True)
+        utils.utils().check_data(n, train_data, n_train)
+        do_test = utils.utils().check_data(n, test_data, 1, test = True)
+        num_epochs = utils.utils().positive_integer(num_epochs, key = 'number of epochs')
+        n_train = utils.utils().positive_integer(n_train, key = 'number of combinations')
+        num_batches = utils.utils().positive_integer(num_batches, key = 'number of batches')
+        utils.utils().enough(n_train, num_batches, modulus = True)
         keep_rate = utils.utils().constrained_float(keep_rate, key = 'dropout')
         train_F = []
         if do_test:
             test_F = []
+            ttd = n.shuffle(test_data[0], test_data[1], test_data[2], 1)
+            tt, tt_m, tt_p = n.get_combination_data(ttd, 0, 1)
         for epoch in tqdm.tqdm(range(num_epochs)):
-            td = n.shuffle(train_data[0], train_data[1], train_data[2])
-            for combination in range(n.n_train):  
+            td = n.shuffle(train_data[0], train_data[1], train_data[2], n_train)
+            for combination in range(n_train):  
                 t, t_m, t_p = n.get_combination_data(td, combination, num_batches)
                 n.sess.run(n.backpropagate, feed_dict = {n.x: t, n.x_m: t_m, n.x_p: t_p, n.dropout: keep_rate, n.dd: der_den})
             train_F.append(np.linalg.det(n.sess.run(n.F, feed_dict = {n.x: t, n.x_m: t_m, n.x_p: t_p, n.dropout: 1., n.dd: der_den})))
             if do_test:
-                test_F.append(np.linalg.det(n.sess.run(n.F, feed_dict = {n.x: test_data[0], n.x_m: test_data[1], n.x_p: test_data[2], n.dropout: 1., n.dd: der_den})))
+                test_F.append(np.linalg.det(n.sess.run(n.F, feed_dict = {n.x: tt, n.x_m: tt_m, n.x_p: tt_p, n.dropout: 1., n.dd: der_den})))
         if do_test:
             return train_F, test_F
         else:
@@ -543,8 +570,9 @@ class IMNN():
         #    summaries of simulations, weighting of samples, total number of draws so far
         #______________________________________________________________
         # FUNCTIONS (DEFINED IN utils.py)
-        # to_continue                   bool      - True if continue running PMC
-        # enough                                  - checks that first value is higher than second
+        # to_continue(list)             bool      - True if continue running PMC
+        # enough(float/int, float/int, optional bool, optional bool)
+        #                                         - checks that first value is higher than second
         #______________________________________________________________
         # INPUTS
         # real_data                     array     - real data to be summarised
