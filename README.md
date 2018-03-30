@@ -244,7 +244,7 @@ t_p = generate_data(θ = [1.1 for i in range(n_train * n.n_p)], train = True)
 np.random.seed()
 ```
 
-We also need to get the denominator of the derivative which is given by the difference between the perturbed parameter values<br><br>
+We also need to get the denominator of the derivative which is given by the difference between the perturbed parameter values<br>
 <a href="https://www.codecogs.com/eqnedit.php?latex=\frac{\partial}{\partial\theta}&space;=&space;\frac{1}{1.1&space;-&space;0.9}." target="_blank"><img src="https://latex.codecogs.com/gif.latex?\frac{\partial}{\partial\theta}&space;=&space;\frac{1}{1.1&space;-&space;0.9}." title="\frac{\partial}{\partial\theta} = \frac{1}{1.1 - 0.9}." /></a><br>
 This needs to be done for every parameter and kept in a numpy array.
 
@@ -310,7 +310,7 @@ train_F, test_F = n.train(train_data = train_data, num_epochs = 1500, n_train = 
 
 
 The output of the the train function is a list of the determinant of the Fisher information at the end of each epoch of training on the train data, and the same on the test data if test data is provided.<br><br>
-These can be plotted, along with the loss function which is simply
+These can be plotted, along with the loss function which is simply<br>
 <a href="https://www.codecogs.com/eqnedit.php?latex=\Lambda&space;=&space;-\frac{1}{2}|F|^2." target="_blank"><img src="https://latex.codecogs.com/gif.latex?\Lambda&space;=&space;-\frac{1}{2}|F|^2." title="\Lambda = -\frac{1}{2}|F|^2." /></a>
 
 ```python
