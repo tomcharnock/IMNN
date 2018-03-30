@@ -499,7 +499,9 @@ class IMNN():
             test_F = []
             ttd = n.shuffle(test_data[0], test_data[1], test_data[2], 1)
             tt, tt_m, tt_p = n.get_combination_data(ttd, 0, 1)
-        for epoch in tqdm.tqdm(range(num_epochs)):
+        tq = tqdm.trange(num_epochs)
+        for epoch in tq:
+            
             td = n.shuffle(train_data[0], train_data[1], train_data[2], n_train)
             for combination in range(n_train):  
                 t, t_m, t_p = n.get_combination_data(td, combination, num_batches)
@@ -507,6 +509,9 @@ class IMNN():
             train_F.append(np.linalg.det(n.sess.run(n.F, feed_dict = {n.x: t, n.x_m: t_m, n.x_p: t_p, n.dropout: 1., n.dd: der_den})))
             if do_test:
                 test_F.append(np.linalg.det(n.sess.run(n.F, feed_dict = {n.x: tt, n.x_m: tt_m, n.x_p: tt_p, n.dropout: 1., n.dd: der_den})))
+                tq.set_postfix(detF = train_F[-1], detF_test = test_F[-1])
+            else:
+                tq.set_postfix(detF = train_F[-1])
         if do_test:
             return train_F, test_F
         else:
@@ -642,19 +647,19 @@ class IMNN():
         criterion_reached = 1e10
         while criterion < criterion_reached:
             cov = np.cov(θ_, aweights = W)
-            W_temp = np.copy(W)
             ϵ = np.percentile(ρ_, 75)
             redraw_index = np.where(ρ_ >= ϵ)[0]
+            W_temp = np.copy(W)
             current_draws = len(redraw_index)
             draws = 0
             while current_draws > 0:
                 draws += current_draws
-                θ_temp = np.random.normal(θ_[redraw_index], cov)
+                θ_temp = np.random.normal(θ_[redraw_index], np.sqrt(cov))
                 below_prior = np.where(θ_temp <= prior[0])[0]
                 above_prior = np.where(θ_temp > prior[1])[0]
                 while len(below_prior) > 0 or len(above_prior) > 0:
-                    θ_temp[below_prior] = np.random.normal(θ_[redraw_index[below_prior]], cov)
-                    θ_temp[above_prior] = np.random.normal(θ_[redraw_index[above_prior]], cov)
+                    θ_temp[below_prior] = np.random.normal(θ_[redraw_index[below_prior]], np.sqrt(cov))
+                    θ_temp[above_prior] = np.random.normal(θ_[redraw_index[above_prior]], np.sqrt(cov))
                     below_prior = np.where(θ_temp <= prior[0])[0]
                     above_prior = np.where(θ_temp > prior[1])[0]
                 if at_once:
@@ -672,12 +677,12 @@ class IMNN():
                     ρ_[redraw_index[accept_index]] = ρ_temp[accept_index]
                     θ_[redraw_index[accept_index]] = θ_temp[accept_index]
                     s_[redraw_index[accept_index]] = simulation_summaries[accept_index]
-                    W_temp[redraw_index[accept_index]] = pθ / np.sum(W * np.exp((-0.5 * np.einsum('i,j->ij', θ_temp[accept_index], - θ_)**2.) / cov) / np.sqrt(2. * np.pi * cov), axis = 1)
+                    W_temp[redraw_index[accept_index]] = pθ / np.sum(W[:, None] * np.exp(-0.5 * (np.stack([θ_temp[accept_index] for i in range(num_keep)]) - θ_[:, None])**2. / cov) / np.sqrt(2 * np.pi * cov), axis = 0)
                 redraw_index = np.where(ρ_ >= ϵ)[0]
                 current_draws = len(redraw_index)
-            W[redraw_index] = W_temp[redraw_index]
+            W = np.copy(W_temp)
             criterion_reached = num_keep / draws
             iteration += 1
             total_draws += draws
-            print('iteration = ' + str(iteration) + ', current criterion = ' + str(criterion_reached) + ', total draws = ' + str(total_draws) + ', ϵ = ' + str(ϵ) + '.')
+            print('iteration = ' + str(iteration) + ', current criterion = ' + str(criterion_reached) + ', total draws = ' + str(total_draws) + ', ϵ = ' + str(ϵ) + '.', end = '\r')
         return θ_, summary, ρ_, s_, W, total_draws
