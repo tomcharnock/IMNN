@@ -1,22 +1,3 @@
-<style TYPE="text/css">
-code.has-jax {font: inherit; font-size: 100%; background: inherit; border: inherit;}
-</style>
-<script type="text/x-mathjax-config">
-MathJax.Hub.Config({
-    tex2jax: {
-        inlineMath: [['$','$'], ['\\(','\\)']],
-        skipTags: ['script', 'noscript', 'style', 'textarea', 'pre'] // removed 'code' entry
-    }
-});
-MathJax.Hub.Queue(function() {
-    var all = MathJax.Hub.getAllJax(), i;
-    for(i = 0; i < all.length; i += 1) {
-        all[i].SourceElement().parentNode.className += ' has-jax';
-    }
-});
-</script>
-<script type="text/javascript" src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
-    
 # Information maximiser
 
 Using neural networks, sufficient statistics can be obtained from data by maximising the Fisher information.
@@ -268,7 +249,7 @@ np.random.seed()
 ```
 
 We also need to get the denominator of the derivative which is given by the difference between the perturbed parameter values<br><br>
-$$\frac{\partial}{\partial\theta} = \frac{1}{1.1 - 0.9}.$$<br>
+<a href="https://www.codecogs.com/eqnedit.php?latex=\frac{\partial}{\partial\theta}&space;=&space;\frac{1}{1.1&space;-&space;0.9}." target="_blank"><img src="https://latex.codecogs.com/gif.latex?\frac{\partial}{\partial\theta}&space;=&space;\frac{1}{1.1&space;-&space;0.9}." title="\frac{\partial}{\partial\theta} = \frac{1}{1.1 - 0.9}." /></a><br>
 This needs to be done for every parameter and kept in a numpy array.
 
 
