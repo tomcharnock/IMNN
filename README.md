@@ -73,7 +73,7 @@ The module can also build simple convolutional or dense networks (or a mixture o
 
 > `'hidden layers'` - `list` - the architecture of the network. each element of the list is a hidden layer. A dense layer can be made using an integer where thet value indicates the number of neurons. A convolutional layer can be built by using a list where the first element is an integer where the number describes the number of filters, the second element is a list of the kernel size in the x and y directions, the third elemnet is a list of the strides in the x and y directions and the final element is string of 'SAME' or 'VALID' which describes the padding prescription.
 
-Here is an example of the IMNN which uses 500 simulations per combination and 50 simulations per derivative for a model with one parameter where we require one summary. The module will build the network which takes in an input image of shape `[10, 20, 1]` and allows the network to decide the weight initialisation, initialises the biases at `bb = 0.1` and uses `tf.nn.leaky_relu` activation with a negative gradient parameter of `α = 0.01`. The network architecture is a convolution with 10 filters and a 5$\times$5 kernel which does 2$\times$2 strides, with 0-padding, followed by another convolution with 6 filters and 3$\times$3 kernel with no striding and 0-padding. This is then followed by two dense layers with 100 neurons in each.
+Here is an example of the IMNN which uses 500 simulations per combination and 50 simulations per derivative for a model with one parameter where we require one summary. The module will build the network which takes in an input image of shape `[10, 20, 1]` and allows the network to decide the weight initialisation, initialises the biases at `bb = 0.1` and uses `tf.nn.leaky_relu` activation with a negative gradient parameter of `α = 0.01`. The network architecture is a convolution with 10 filters and a 5x5 kernel which does 2x2 strides, with 0-padding, followed by another convolution with 6 filters and 3x3 kernel with no striding and 0-padding. This is then followed by two dense layers with 100 neurons in each.
 
 
 ```python
@@ -311,8 +311,7 @@ train_F, test_F = n.train(train_data = train_data, num_epochs = 1500, n_train = 
 
 The output of the the train function is a list of the determinant of the Fisher information at the end of each epoch of training on the train data, and the same on the test data if test data is provided.<br><br>
 These can be plotted, along with the loss function which is simply
-$$\Lambda = -\frac{1}{2}|F|^2.$$
-
+<a href="https://www.codecogs.com/eqnedit.php?latex=\Lambda&space;=&space;-\frac{1}{2}|F|^2." target="_blank"><img src="https://latex.codecogs.com/gif.latex?\Lambda&space;=&space;-\frac{1}{2}|F|^2." title="\Lambda = -\frac{1}{2}|F|^2." /></a>
 
 ```python
 train_F = np.array(train_F)
