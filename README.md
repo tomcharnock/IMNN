@@ -3,581 +3,460 @@
 
 Using neural networks, sufficient statistics can be obtained from data by maximising the Fisher information.
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.1175196.svg)](https://doi.org/10.5281/zenodo.1175196) 
-
-Citing arXiv:1802.03537 is a condition of use of this code for any publication.
-
-To run this code several packages are needed. <br>
+When using this code please cite <a href="https://arxiv.org/abs/1802.03537">arXiv:1802.03537</a>.<br><br>
+The code in the paper can be downloaded as v1 or v1.1 of the code kept on zenodo:<br><br>
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.1175196.svg)](https://doi.org/10.5281/zenodo.1175196)
 <br>
-`python-3.6.1`<br>
-`jupyter-4.3.0`<br>
-`tensorflow-1.5.0`<br>
-`numpy-1.14.0`<br>
-`scipy-0.19.1`<br>
-`tqdm-4.15.0`<br>
-`hmf-3.0.0`<br>
-`astropy-1.3.2`<br>
-<br>
-`sys (native)`<br>
-`operator (native)`<br>
-<br>
-Although these precise versions may not be necessary, I have put them here to avoid possible conflicts.
+The code presented below is version two (and is much more powerful).
 
-This is an example of how to run the information maximiser for the examples in the paper. For reference, all code is run on a nVidia GeForce GTX 1080Ti (OC Strix).
+This code is run using<br>
+>`python-3.6.1`
+
+>`jupyter-1.0.0`
+
+>`tensorflow-1.6.0`
+
+>`numpy-1.14.2`
+
+>`tqdm==4.19.9`
+
+>`sys (native)`
+
+Although these precise versions may not be necessary, I have put them here to avoid possible conflicts. For reference, all code is run on a nVidia GeForce GTX 1080Ti (OC Strix).
 
 ## Load modules
 
 
 ```python
-%matplotlib notebook
+%matplotlib inline
 import numpy as np
 import matplotlib.pyplot as plt
-import information_maximiser as inf_max
+import tensorflow as tf
+import IMNN
 ```
 
-# Train the network
-
-## Define model parameters
-
-The parameters of the test models are defined here. These will in general be used to define some network parameters later. Details of the models are given in the paper. We will demonstrate here with noiseless Gaussian noise.<br><br>
-The parameters are<br><br>
-> `method` - a string containing either `Gaussian`, `Lyman-α`, or `LISA`
-
-> `fiducial θ` - a float which is the fiducial parameter for training the network. When the `method` is `Lyman-α` the float will be exponentiated.
-
-> `number of inputs` - an interger with the number of inputs to the network for the Gaussian noise. This is not needed when `method` is `Lyman-α` or `LISA`.
-
-> `total number of simulations` - an integer of the total number of simulations which will be used for training (this number of simulations will be made for the derivatives as well).
-
-> `derivative` - a list of two floats which are the values at which to make the simulations for the lower and upper parts of the numerical derivative. When the `method` is `Lyman-α` these will be exponentiated. 
-
-> `noise` - used to define the noise when the `method` is `Gaussian`. If no noise is needed this can be `None` or `0.`. For known noise this is a float greater than `0.`. For unknown noise this is a list of two positive floats where the first element is the lower bound of the noise and the second is the upper bound. This is not needed when `method` is `Lyman-α` or `LISA`.
-
-> `bin size` - a float containing the resolution of pixel bins in BOSS in $\Delta\ln\lambda/1nm$. This is not needed when `method` is `Gaussian` or `LISA`.
-
-> `z` - a float describing the fiducial redshift of the quasar of interest. This is not needed when `method` is `Gaussian` or `LISA`.
-
-> `cosmology` - a dictionary containing the values of cosmological constants `H_0`, `Ω_m`, `Ω_b`, `σ_8`, `n_s`, `m_ν`, `N_eff`, and `T_CMB`. For more details see `information_maximiser.py`. If `None` a default cosmology is used. This is not needed when `method` is `Gaussian` or `LISA`.
-
-> `t_L` - a float describing the light travel time along LISA arm. This is not needed when `method` is `Gaussian` or `Lyman-α`.
-
-> `S_acc` - a float containing the proof mass acceleration noise. This is not needed when `method` is `Gaussian` or `Lyman-α`.
-
-> `S_sn` - a float of the value of the LISA shot noise. This is not needed when `method` is `Gaussian` or `Lyman-α`.
-
-> `Q` - a float of the width of the gravitational waveform. This is not needed when `method` is `Gaussian` or `Lyman-α`.
- 
-> `A` - a float of the amplitude of the gravitational waveform. This is not needed when `method` is Gaussian` or `Lyman-α`.
-
-> `t_c` - a float of the time of the gravitational event. This is not needed when `method` is `Gaussian` or `Lyman-α`.
-
-> `SN` -  a float containing the signal to noise of gravitational event. This is not needed when `method` is `Gaussian` or `Lyman-α`.
+    /Users/charnock/.pyenv/versions/anaconda3-5.0.0/lib/python3.6/site-packages/h5py/__init__.py:34: FutureWarning: Conversion of the second argument of issubdtype from `float` to `np.floating` is deprecated. In future, it will be treated as `np.float64 == np.dtype(float).type`.
+      from ._conv import register_converters as _register_converters
 
 
-To test with known noisy gaussian noise you can use
-```
-test_model_parameters = {
-    'method': 'Gaussian',
-    'fiducial θ': 1.,
-    'number of inputs': 10,
-    'total number of simulations': 1000,
-    'derivative': [1. - 0.1, 1. + 0.1],
-    'noise': 1.,
-}
-```
+## Initiliase the neural network
+### Define network parameters
+The network works with a base set of parameters which are<br>
+> `'verbose'` - `bool` - whether to print out diagnostics
 
-For unknown noisy Gaussian noise
-```
-test_model_parameters = {
-    'method': 'Gaussian',
-    'fiducial θ': 1.,
-    'number of inputs': 10,
-    'total number of simulations': 1000,
-    'derivative': [1. - 0.1, 1. + 0.1],
-    'noise': [0., 2.],
-}
-```
+> `'number of simulations'` - `int` - the number of simulations to use in any one combination
 
-For the Lyman-α problem considered in the paper use
-```
-test_model_parameters = {
-    'method': 'Lyman-α',
-    'fiducial θ': 1.,
-    'total number of simulations': 1000,
-    'derivative': [1. - 0.1, 1. + 0.1],
-    'bin size': 1e-4,
-    'z': 2.91,
-    'cosmology': None,
-}
-```
+> `'differentiation fraction'` - `float` - a fraction of the simulations to use for the numerical derivative
 
-Finally, for the LISA gravitational waveform problem in the paper use
-```
-test_model_parameters = {
-    'method': 'LISA',
-    'fiducial θ': 0.1,
-    'total number of simulations': 1000,
-    'derivative': [0.1 - 0.0325, 0.1 + 0.1],
-    't_L': 16.678,
-    'S_acc': 2.5e-48,
-    'S_sn': 1.8e-37,
-    'Q': 5.,
-    'A': 3.5,
-    't_c': 1e5,
-    'SN': 34.,
-}
-```
+> `'number of parameters'` - `int` - number of parameters in a model
 
-Lets consider the simplest model in this example.
-```python
-test_model_parameters = {
-    'method': 'Gaussian',
-    'fiducial θ': 1.,
-    'number of inputs': 10,
-    'total number of simulations': 1000,
-    'derivative': [1. - 0.1, 1. + 0.1],
-    'noise': None,
-}
-```
+> `'number of summaries'` - `int` - number of summaries the network makes from the data
 
-## Initialise the test model
+> `'input shape'` - `int` or `list` - the number of inputs or the shape of the input if image-like input
 
+> `'prebuild'` - `bool` - whether to get the network to build a network or to provided your own
 
-```python
-t = inf_max.test_models(test_model_parameters)
-```
-
-## Create training and test data
-
-
-```python
-train_data = t.create_data(derivative = True)
-test_data = t.create_data(derivative = True)
-```
-
-## Define network parameters
-
-The parameters of the network are defined here. We will demonstrate here with network used for the noiseless Gaussian noise test.<br><br>
-The parameters are<br><br>
-
-> `total number of simulations` - an integer of the total number of simualtions. We use the same number of simulations as we have created.
-
-> `number of inputs` - an integer of the number of inputs. This needs to be the same dimension as one simulation.
-
-> `number of parameters` - an integer of the number of parameters in the Fisher information matrix. This is only properly tested for 1 parameter at the moment due to the tests we've considered. This is also the number of outputs from the network.
-
-> `parameter direction` - a boolean which determines which direction the covariance matrix is calculated for the Fisher information matrix. This parameter doesn't matter for 1 parameter and isn't tested for more than 1.
-
-> `number of combinations` - an integer of the number of ways to split the data. This needs to be small enough to have reliable statistics, but large enough that there is some variation in the statistics, i.e. greater than 1.
-
-> `differentiation fraction` - a float between 0 and 1 describing what fraction of the simulations used to calculate the numerical derivative are needed.
-
-> `number of batches` - an integer of the number of batches to be averaged over. This cannot be larger than the number of combinations.
-
-> `hidden layers` - a list containing positive integers which is the number of neurons in each hidden layer. Each element in the list is the a hidden layer.
-
-> `activation function` - a string with either `relu`, `softplus`, `tanh`, or `sigmoid` which defines what type of activation function to use.
-
-> `biases bias` - value to initialise all the biases at. This should be slightly positive when `activation function` is `relu`, although this is not necessary.
-
-> `alpha` - a float which describes the *leakiness* of the `relu` `activation function`, but doesn't do anything else for other `activation functions`.
-
-> `dropout` - a float between 0 and 1 which describes the number of neurons to set to zero and not update on each round of training to avoid overfitting.
-
-> `denominator for the derivative` - a numpy array where each element is the inverse of the difference between the upper and lower values used to calculate the numerical derivative. The test models module will provide this.
-
-> `learning rate` - a small float use to dictate the size of steps of the updates of weights and biases after each round of training.
-
-To test with known noisy gaussian noise you can use
-```
-parameters = {
-    'total number of simulations': t.tot_sims,
-    'number of inputs': t.inputs,
-    'number of parameters': 1,
-    'number of combinations': 2,
-    'differentiation fraction': 0.1,
-    'number of batches': 1,
-    'hidden layers': [128, 128],
-    'biases bias': 0.1,
-    'activation function': 'relu',
-    'alpha': 0.1,
-    'dropout': 0.5,
-    'denominator for the derivative': t.der_den,
-    'learning rate': 0.01,
-    'parameter direction': False,
-}
-```
-
-For unknown noisy Gaussian noise
-```
-parameters = {
-    'total number of simulations': t.tot_sims,
-    'number of inputs': t.inputs,
-    'number of parameters': 1,
-    'number of combinations': 2,
-    'differentiation fraction': 0.1,
-    'number of batches': 1,
-    'hidden layers': [128, 128, 64],
-    'biases bias': 0.1,
-    'activation function': 'relu',
-    'alpha': 0.1,
-    'dropout': 0.5,
-    'denominator for the derivative': t.der_den,
-    'learning rate': 0.01,
-    'parameter direction': False,
-}
-```
-
-For the Lyman-α problem considered in the paper use
-```
-parameters = {
-    'total number of simulations': t.tot_sims,
-    'number of inputs': t.inputs,
-    'number of parameters': 1,
-    'number of combinations': 2,
-    'differentiation fraction': 0.5,
-    'number of batches': 1,
-    'hidden layers': [1024, 512, 256, 128],
-    'biases bias': 0.1,
-    'activation function': 'relu',
-    'alpha': 0.1,
-    'dropout': 0.2,
-    'denominator for the derivative': t.der_den,
-    'learning rate': 1e-2,
-    'parameter direction': False,
-}
-```
-
-Finally, for the LISA gravitational waveform problem in the paper use
-```
-parameters = {
-    'total number of simulations': t.tot_sims,
-    'number of inputs': t.inputs,
-    'number of parameters': 1,
-    'number of combinations': 2,
-    'differentiation fraction': 0.1,
-    'number of batches': 1,
-    'hidden layers': [10, 10, 10, 10, 10],
-    'biases bias': 0.1,
-    'activation function': 'relu',
-    'alpha': 0.01,
-    'dropout': 0.1,
-    'denominator for the derivative': t.der_den,
-    'learning rate': 0.00001,
-    'parameter direction': False,
-}
-```
-
-We are using
 ```python
 parameters = {
-    'total number of simulations': t.tot_sims,
-    'number of inputs': t.inputs,
+    'verbose': True,
+    'number of simulations': 500,
+    'differentiation fraction': .1,
     'number of parameters': 1,
-    'number of combinations': 2,
-    'differentiation fraction': 0.1,
-    'number of batches': 1,
-    'hidden layers': [96, 96],
-    'biases bias': 0.1,
-    'activation function': 'relu',
-    'alpha': 0.01,
-    'dropout': 0.5,
-    'denominator for the derivative': t.der_den,
-    'learning rate': 0.01,
-    'parameter direction': False,
+    'number of summaries': 1,
+    'input shape': [10, 20, 1],
+    'prebuild': False,
+}
+```
+The module can also build simple convolutional or dense networks (or a mixture of the two), which can be trigger by setting `'prebuild': True`. Several parameters are required to allow the network to build the network. These are<br>
+> `'wv'` - `float` - the variance with which to initialise the weights. If this is 0 or less, the network will determine the weight variance
+
+> `'bb'` - `float` - the constant value with which to initialise the biases
+
+> `'activation'` - `TensorFlow function` - a native tensorflow activation function
+
+> `'α'` - `float` or `int` - an additional parameter, if needed, for the tensorflow activation function
+
+> `'hidden layers'` - `list` - the architecture of the network. each element of the list is a hidden layer. A dense layer can be made using an integer where thet value indicates the number of neurons. A convolutional layer can be built by using a list where the first element is an integer where the number describes the number of filters, the second element is a list of the kernel size in the x and y directions, the third elemnet is a list of the strides in the x and y directions and the final element is string of 'SAME' or 'VALID' which describes the padding prescription.
+
+Here is an example of the IMNN which uses 500 simulations per combination and 50 simulations per derivative for a model with one parameter where we require one summary. The module will build the network which takes in an input image of shape `[10, 20, 1]` and allows the network to decide the weight initialisation, initialises the biases at `bb = 0.1` and uses `tf.nn.leaky_relu` activation with a negative gradient parameter of `α = 0.01`. The network architecture is a convolution with 10 filters and a 5$\times$5 kernel which does 2$\times$2 strides, with 0-padding, followed by another convolution with 6 filters and 3$\times$3 kernel with no striding and 0-padding. This is then followed by two dense layers with 100 neurons in each.
+
+
+```python
+parameters = {
+    'verbose': True,
+    'number of simulations': 500,
+    'number of parameters': 1,
+    'differentiation fraction': .1,
+    'number of summaries': 1,
+    'prebuild': True,
+    'input shape': [10, 20, 1],
+    'wv': 0.,
+    'bb': 0.1,
+    'activation': tf.nn.leaky_relu,
+    'α': 0.01,
+    'hidden layers': [[10, [5, 5], [2, 2], 'SAME'], [6, [3, 3], [1, 1], 'SAME'], 100, 100],
 }
 ```
 
-## Initialise the neural network parameters
+All the network parameters are initialised using
 
 
 ```python
-n = inf_max.network(parameters)
+n = IMNN.IMNN(parameters = parameters)
 ```
 
-## Create the neural network
+    network architecture is [[10, 20, 1], [10, [5, 5], [2, 2], 'SAME'], [6, [3, 3], [1, 1], 'SAME'], 100, 100, 1].
+
+
+### Build the network
+To build the network a learning rate, η, must be defined. The `setup(η)` function initialises the input tensors, builds the network and defines the optimisation scheme.
 
 
 ```python
-n.setup()
+n.setup(η = 1e-4, network = None)
 ```
 
-## Train the neural network
+    Tensor("Placeholder:0", shape=(?, 10, 20, 1), dtype=float32)
+    Tensor("IMNN/layer_1/conv_1/mul:0", shape=(?, 5, 10, 10), dtype=float32)
+    Tensor("IMNN/layer_2/conv_2/mul:0", shape=(?, 5, 10, 6), dtype=float32)
+    Tensor("IMNN/layer_3/dense_3/mul:0", shape=(?, 100), dtype=float32)
+    Tensor("IMNN/layer_4/dense_4/mul:0", shape=(?, 100), dtype=float32)
+    Tensor("IMNN/layer_5/LeakyRelu/Maximum:0", shape=(?, 1), dtype=float32)
+    Tensor("StopGradient:0", shape=(?, 10, 20, 1), dtype=float32)
+    Tensor("IMNN/layer_1_1/conv_1/mul:0", shape=(?, 5, 10, 10), dtype=float32)
+    Tensor("IMNN/layer_2_1/conv_2/mul:0", shape=(?, 5, 10, 6), dtype=float32)
+    Tensor("IMNN/layer_3_1/dense_3/mul:0", shape=(?, 100), dtype=float32)
+    Tensor("IMNN/layer_4_1/dense_4/mul:0", shape=(?, 100), dtype=float32)
+    Tensor("IMNN/layer_5_1/LeakyRelu/Maximum:0", shape=(?, 1), dtype=float32)
+    Tensor("StopGradient_1:0", shape=(?, 10, 20, 1), dtype=float32)
+    Tensor("IMNN/layer_1_2/conv_1/mul:0", shape=(?, 5, 10, 10), dtype=float32)
+    Tensor("IMNN/layer_2_2/conv_2/mul:0", shape=(?, 5, 10, 6), dtype=float32)
+    Tensor("IMNN/layer_3_2/dense_3/mul:0", shape=(?, 100), dtype=float32)
+    Tensor("IMNN/layer_4_2/dense_4/mul:0", shape=(?, 100), dtype=float32)
+    Tensor("IMNN/layer_5_2/LeakyRelu/Maximum:0", shape=(?, 1), dtype=float32)
+    Tensor("central_output:0", shape=(?, 500, 1), dtype=float32)
+    Tensor("central_mean:0", shape=(?, 1, 1), dtype=float32)
+    Tensor("central_difference_from_mean:0", shape=(?, 500, 1), dtype=float32)
+    Tensor("central_covariance:0", shape=(?, 1, 1), dtype=float32)
+    Tensor("central_inverse_covariance:0", shape=(?, 1, 1), dtype=float32)
+    Tensor("lower_output:0", shape=(?, 50, 1, 1), dtype=float32)
+    Tensor("upper_output:0", shape=(?, 50, 1, 1), dtype=float32)
+    Tensor("mean_derivative:0", shape=(?, 1, 1), dtype=float32)
+    Tensor("fisher_information:0", shape=(1, 1), dtype=float32)
 
-The training commences for `n_epochs` of passes through all the data.
 
-
+### Self-defined network
+A self defined network can be used instead of letting the module build the network for you. To do this you simply pass a function which contains the network to `setup(η = η, network = network)`. This function needs to take in two input tensors, the first is the shape of the input with `None` in the first axis and the second tensor is a tensorflow float (which will be the dropout). Since the weights need to be shared between several corresponding networks each set of trainable variables must be defined in its own scope. An example of the above network defined outside of the module is
 ```python
-n_epochs = 1000
-train_F, test_F, F_arr, W, b = n.train(train_data, n_epochs, test_data = test_data)
+def network(input_tensor, dropout):
+    with tf.variable_scope('layer_1'):
+        weights = tf.get_variable("weights", [5, 5, 1, 10], initializer = tf.random_normal_initializer(0., 1.))
+        biases = tf.get_variable("biases", [10], initializer = tf.constant_initializer(0.1))
+    x = tf.nn.conv2d(input_tensor, weights, [1, 2, 2, 1], padding = 'SAME')
+    x = tf.add(x, biases)
+    x = tf.nn.leaky_relu(x, 0.01)
+    x = tf.nn.dropout(x, dropout)
+    with tf.variable_scope('layer_2'):
+        weights = tf.get_variable("weights", [5, 5, 10, 6], initializer = tf.random_normal_initializer(0., 1.))
+        biases = tf.get_variable("biases", [6], initializer = tf.constant_initializer(0.1))
+    x = tf.nn.conv2d(x, weights, [1, 1, 1, 1], padding = 'SAME')
+    x = tf.add(x, biases)
+    x = tf.nn.leaky_relu(x, 0.01)
+    x = tf.nn.dropout(x, dropout)
+    x = tf.reshape(x, (-1, 300))
+    with tf.variable_scope('layer_3'):
+        weights = tf.get_variable("weights", [300, 100], initializer = tf.random_normal_initializer(0., np.sqrt(2. / 300)))
+        biases = tf.get_variable("biases", [100], initializer = tf.constant_initializer(0.1))
+    x = tf.matmul(x, weights)
+    x = tf.add(x, biases)
+    x = tf.nn.leaky_relu(x, 0.01)
+    x = tf.nn.dropout(x, dropout)
+    with tf.variable_scope('layer_4'):
+        weights = tf.get_variable("weights", [100, 100], initializer = tf.random_normal_initializer(0., np.sqrt(2. / 100)))
+        biases = tf.get_variable("biases", [100], initializer = tf.constant_initializer(0.1))
+    x = tf.matmul(x, weights)
+    x = tf.add(x, biases)
+    x = tf.nn.leaky_relu(x, 0.01)
+    x = tf.nn.dropout(x, dropout)
+    with tf.variable_scope('layer_5'):
+        weights = tf.get_variable("weights", [100, 1], initializer = tf.random_normal_initializer(0., np.sqrt(2. / 100)))
+        biases = tf.get_variable("biases", [1], initializer = tf.constant_initializer(0.1))
+    x = tf.matmul(x, weights)
+    x = tf.add(x, biases)
+    x = tf.nn.leaky_relu(x, 0.01)
+    return x
 ```
 
-    100%|██████████| 1000/1000 [00:27<00:00, 37.02it/s]
-
-
-We can see how much the Fisher information from the network is as a function of the number of epochs of training. For this problem we want the Fisher information to be close to ${\bf F}=5$ - although this may not be possible if there is not enough variety in the training data.
-
-
+### Changing minimisation scheme
+By default the optimation scheme is<br>
 ```python
-plt.figure()
-plt.plot(train_F)
-plt.plot(test_F, linestyle = 'dashed')
-plt.xlim([0, len(train_F)])
-plt.xlabel('Number of epochs')
-plt.ylabel('Fisher information')
-print('Mean training Fisher over last 10% training epochs = ', np.mean(train_F[-int(n_epochs * 0.1):]))
-print('Mean testing Fisher over last 10% training epochs = ', np.mean(test_F[-int(n_epochs * 0.1):]))
+n.backpropagate = tf.train.GradientDescentOptimizer(η).minimize(Λ)
 ```
-![Training the network](https://github.com/tomcharnock/information_maximiser/blob/master/data/1.png)
-
-    Mean training Fisher over last 10% training epochs =  4.64849
-    Mean testing Fisher over last 10% training epochs =  4.82369
-
-
-# Test the network
-
-We create some *real* data which we can use to see how well the network has learned how to summarise the data. When using LISA it is easiest to use
-```
-real_data, noise = t.gravitational_wave_burst(0.1, None, return_noise = True, shaped = False)
-real_data_shaped = real_data[np.newaxis, np.newaxis, :]
-```
-
-since you want the noise for normalisation and you need a shaped array to feed through the network for summaries.
-
-
+where Λ is the loss function tensor. To use any other training scheme, such as the `Adam` optimiser, it is sufficient to run
 ```python
-real_data = t.create_data(θ = 1., num = 1, shaped = True)
+n.backpropagate = tf.train.AdamOptimizer(η, β1, β2, ε).minimize(n.loss(n.F))
 ```
-
-We need to load the neural networks into the test models to be able to perform the PMC (or any other tests)
-
-
+after `setup(η)` to override the default minimisation routine. If you want to continue to use the default minimisation routine but want to change the learning rate without reinitialising you can run 
 ```python
-t.n = n
+n.training_scheme(η = new_η)
 ```
 
-## Calculate exact posterior distribution
-
-Since we know how to exactly calculate the posterior distribution for the Gaussian problem we can do that here. If the noise is unknown then a Rao-Blackwell estimation can be made by summing over the posterior with a series of values for the noise. Note that this will not work for the Lyman-α or LISA problems, although the analytic LISA likelihood can be calculated using
+## Generate data
+Here were going to use a 2D image of Gaussian noise with zero mean and unknown variance to see if the network can learn to summarise this variance.<br><br>
+We start by defining a function to generate the data with the correct shape. This should be 
 ```
-posterior = t.lnL_grav(real_data, f, C = None, W = None, b = None, derivative_diff = None, MOPED = None)
+data_shape = None + input shape
 ```
-
-where  `f` is the values of the central oscillation frequency to evaluate the likelihood at. `C` is a scaling factor, `W` and `b` are the weights and `derivative_diff` are the weights, biases and a list containing the lower, upper derivative values and their difference. `MOPED` is the compression parameter. Leaving all the optional parameters as `None` will result in the likelihood using all the data, providing the `MOPED` parameter will perform MOPED compression and all three of `W`, `b` and `derivative_diff` are needed for IMNN compression.
-
-
-```python
-real_summary = np.sum(real_data**2.)
+It is useful to define this function so that it only takes in the value of the parameter as its input since the function can then be used for ABC later.<br><br>
+The data needs to be generated at a fiducial parameter value and at perturbed values just below and above the fiducial parameter for the numerical derivative. The data at the perturbed values should have the shape
 ```
-
-
-```python
-theta_values = np.linspace(0.05, 10, 1000)
-posterior = np.exp(t.lnL(real_summary, theta_values, 0., 10.))
-posterior = posterior / np.max(posterior)
-```
-
-
-```python
-plt.figure()
-plt.plot(theta_values, posterior)
-plt.xlim([0., 10.])
-plt.yticks([])
-plt.xlabel('Variance, $\\theta$')
-plt.ylabel('$\mathcal{P}(\\theta|x)$');
-```
-
-![Training the network](https://github.com/tomcharnock/information_maximiser/blob/master/data/2.png)
-
-
-When using LISA the exact likelihood can be calculated for the network summary as well using
-```
-network_posterior = t.lnL_grav(real_data_shaped, f, noise, W = W, b = b)
-```
-
-## First approximation using the network
-
-Without needing to create any more simulations we can consider the first approximation to the posterior distribution using the network to summarise the data by expanding the likelihood to first order. The array between `-1` and `9` are the values of $\Delta\theta$ to calculate the expansion at - this should only be trusted for small values.
-
-
-```python
-n_points = 1000
-m2lnL = t.asymptotic_likelihood(W, b, real_data, n.epoch(n.data_for_fisher(train_data))[0: 1], np.linspace(-1., 9., n_points))
+perturbed_data_shape = None + number of parameters + input shape
 ```
 
 
 ```python
-plt.figure()
-plt.plot(np.linspace(0., 10., n_points), np.exp(-0.5 * m2lnL), zorder = 1)
-plt.xlim([0., 10.])
-plt.yticks([])
-plt.xlabel('Variance, $\\theta$')
-plt.ylabel('$\mathcal{P}(\\theta|x)$');
+def generate_data(θ, train = False):
+    if train:
+        return np.moveaxis(np.random.normal(0., np.sqrt(θ), [1] + n.inputs + [len(θ)]), -1, 0)
+    else:
+        return np.moveaxis(np.random.normal(0., np.sqrt(θ), n.inputs + [len(θ)]), -1, 0)
 ```
 
-![Training the network](https://github.com/tomcharnock/information_maximiser/blob/master/data/3.png)
-
-
-## ABC
-
-We can also do a naive ABC calculation of the posterior by generating `10000` random draws from a uniform prior (or uniform in natural log for Lyman-α or uniform in $10^x$ for LISA). We can also get the real summary back from the simulations created in the ABC to compare the network summary, although this doesn't work for Lyman-α or LISA.
-
-
-```python
-num_points = 10000
-summary, thetas, summaries, rho, r_s = t.ABC(W, b, train_F[-1], real_data, [0., 10.], num_points, real_summary = True)
-```
-
-    100%|██████████| 10000/10000 [00:31<00:00, 313.89it/s]
-
-
-We accept the theta values which are within the closest 1% of the real data. This is an arbitrary choice of epsilon here.
-
-
-```python
-epsilon = 0.01 * (np.max(summaries) - np.min(summaries))
-accepted_indices = np.where(np.abs(summaries - summary) < epsilon)[0]
-not_accepted_indices = [i for i in range(len(summaries)) if i not in accepted_indices]
-accepted_summaries = summaries[accepted_indices]
-accepted = thetas[accepted_indices]
-```
-
-The accepted points are plotted in blue and the reject points in orange. The black dashed line shows the network summary of the real data.
-
-
-```python
-plt.figure()
-plt.scatter(accepted, accepted_summaries, s = 5, lw = 0)
-plt.scatter(thetas[not_accepted_indices], summaries[not_accepted_indices], s = 5, lw = 0)
-plt.plot([0., 10.], [summary, summary], color = 'black', lw = 1, linestyle = 'dashed')
-plt.xlim([0., 10.])
-plt.xlabel('Variance, $\\theta$')
-plt.ylabel('Network output');
-```
-
-![Training the network](https://github.com/tomcharnock/information_maximiser/blob/master/data/4.png)
-
-# PMC
-
-We can use the population Monte Carlo algorithm to find `1000` samples from the posterior distribution. We can use a criterion to stop the PMC when we are convinced that the distribution has converged. Here we have set the criterion to `0.1`, which means that there needs to be `1000/0.1` draws of the parameter values to get `250` draws moved. This is overkill here, - we use `500` draws and a criterion of `0.5` in the paper.
-
-
-```python
-num_in_posterior = 1000
-PMC_S, PMC_t, PMC_ss, PMC_r, PMC_w = t.PMC(W, b, train_F[-1], real_data, [0., 10.], num_points, num_in_posterior, 0.1)
-```
-
-    100%|██████████| 1000/1000 [00:03<00:00, 314.81it/s]
-
-
-    1 1383 383 250 2.6109660574412534
-    2 1900 517 250 1.9342359767891684
-    3 2569 669 250 1.4947683109118086
-    4 3424 855 250 1.1695906432748537
-    5 4408 984 250 1.016260162601626
-    6 5315 907 250 1.1025358324145536
-    7 6614 1299 250 0.7698229407236336
-    8 7974 1360 250 0.7352941176470589
-    9 9482 1508 250 0.6631299734748011
-    10 11720 2238 250 0.44682752457551383
-    11 14003 2283 250 0.43802014892685065
-    12 17968 3965 250 0.25220680958385877
-    13 24103 6135 250 0.16299918500407498
-    14 29282 5179 250 0.19308746862328635
-    15 36134 6852 250 0.14594279042615294
-    16 48473 12339 250 0.08104384471999351
-
-
-The blue points are accepted samples from the posterior distribution defined by the PMC.
-
-
-```python
-plt.figure()
-plt.plot([0., 10.], [PMC_S, PMC_S], color = 'black', lw = 1, linestyle = 'dashed', zorder = 0)
-plt.scatter(PMC_t, PMC_ss, s = 5, lw = 0)
-plt.xlim([0., 10.])
-plt.ylim([np.min(PMC_ss), np.max(PMC_ss)])
-plt.xlabel('Variance, $\\theta$')
-plt.ylabel('Network output');
-```
-
-![Training the network](https://github.com/tomcharnock/information_maximiser/blob/master/data/5.png)
-
-
-## Posterior distribution comparison
-
-We can show the compared posteriors from, exact in orange, first order approximation in blue dashed and from the PMC in the purple histogram. We haven't shown the ABC histogram here, but it will follow the PMC quite closely. We normalise all the posterior distributions according to the histogram.
-
-
-```python
-plt.figure()
-num_bins = 50
-hist, bin_edges, patches = plt.hist(PMC_t, bins = np.linspace(0., 10., num_bins), histtype = u'step', normed = True, linewidth = 1.5, color = '#9467bd')
-ind = np.where(hist == np.max(hist))[0][0]
-norm = np.mean(hist[ind: ind + 1])
-plt.plot(np.linspace(0., 10., n_points), np.exp(-0.5 * m2lnL) / np.max(np.exp(-0.5 * m2lnL))*norm, zorder = 1, color = '#1f77b4', linestyle = 'dashed')
-plt.plot(theta_values, posterior * norm, color = '#ff7f0e')
-plt.xlim([0., 10.])
-plt.yticks([])
-plt.xlabel('Variance, $\\theta$')
-plt.ylabel('$\mathcal{P}(\\theta|x)$');
-```
-
-![Training the network](https://github.com/tomcharnock/information_maximiser/blob/master/data/6.png)
-
-## Different network architectures
-
-The IMNN is built as a fully-connected artificial neural network, but sometimes other network architectures will be preferable. These can be very easily accomodated by passing a TensorFlow tensor to the IMNN. For example, if there is some translationally invariant 2D array with shape `[28, 28, 1]` which is dependent on only one parameter, we could choose to use a convolutional neural network by using
+### Training data
+Enough data needs to be made to train the network sucessfully. This normally means several combinations of large amounts of simulations. We have already chosen the number of simulations which makes up a single combination. This is stored in the parameter `n.n_s` and in our case `n.n_s = 500`. We also choose two combinations where all the simulations will get mixed during training.
 
 
 ```python
 n_train = 2
-n_s = int(tot_sims / n_train)
-diff_frac = 0.1
-n_p = int(n_s * diff_frac)
-n_batches = 1
-n_spp = n_s + 2 * (n_params * n_p)
-shape = [28, 28, 1]
-
-x = tf.placeholder(tf.float32, shape = [n_batches, n_spp] + shape, name = 'x')
-input_layer = tf.reshape(x, [n_batches * n_spp] + shape)
-convolution_1 = tf.layers.conv2d(inputs = input_layer, filters = 32, kernel_size = [5, 5], padding = "same", activation = tf.nn.relu)
-pool_1 = tf.layers.max_pooling2d(inputs = convolution_1, pool_size = [2, 2], strides = 2)
-convolution_2 = tf.layers.conv2d(inputs = pool_1, filters = 64, kernel_size = [5, 5], padding = "same", activation = tf.nn.relu)
-pool_2 = tf.layers.max_pooling2d(inputs = convolution_2, pool_size = [2, 2], strides = 2)
-pool_2_flat = tf.reshape(pool2, [n_batches, n_spp, int(np.prod(pool_2.get_shape().as_list()[1:]))])
 ```
 
-Here `tot_sims` is the total number of simulations which will be passed to the network, and `diff_frac` is the fraction of the simulations used for the numerical derivative. `n_train` is the number of combinations to split the data into and `n_batches` is the number of combinations to process as one batch.
+The fiducial parameter data can now be created, with variance θ = 1. We define how many simulations to use by passing the fiducial parameter through as a list. This is very useful for the ABC function later.
 
-The network is then initialised as before, where `parameters['number of inputs']` must be the size of the flattened output of the custom network and the output tensor of the custom network must be passed to `n.setup()`.
 
 ```python
-parameters = {
-    'total number of simulations': tot_sims,
-    'number of inputs': int(np.prod(pool_2.get_shape().as_list()[1:])),
-    'number of parameters': 1,
-    'number of combinations': n_train,
-    'differentiation fraction': diff_frac,
-    'number of batches': n_batches,
-    'hidden layers': None,
-    'biases bias': 0.1,
-    'activation function': 'relu',
-    'alpha': 0.1,
-    'dropout': 0.1,
-    'denominator for the derivative': der_den,
-    'learning rate': 0.01,
-    'parameter direction': False,
-}
-n = inf_max.network(parameters)
-n.setup(pool_2_flat)
+t = generate_data(θ = [1. for i in range(n_train * n.n_s)], train = False)
 ```
 
-Training is then identical to before using 
+It is essential to suppress the sample variance between the lower and upper perturbed values which can be done by setting the seed to be equal before calling the data generation function.
+
 
 ```python
-n_epochs = 1000
-train_F, test_F, F_arr, W, b = n.train(train_data, n_epochs, test_data = test_data)
+seed = np.random.randint(1e6)
+np.random.seed(seed)
+t_m = generate_data(θ = [0.9 for i in range(n_train * n.n_p)], train = True)
+np.random.seed(seed)
+t_p = generate_data(θ = [1.1 for i in range(n_train * n.n_p)], train = True)
+np.random.seed()
 ```
 
-A custom architecture can also be used as an input to a fully-connected artificial neural network by supplying `parameters['hidden layers'] = [size_of_first_layer, size_of_second_layer, etc.]`. `parameters['number of inputs']` still needs to be the size of the output of the flatten custom network.
+We also need to get the denominator of the derivative which is given by the difference between the perturbed parameter values<br><br>
+$$\frac{\partial}{\partial\theta} = \frac{1}{1.1 - 0.9}.$$<br>
+This needs to be done for every parameter and kept in a numpy array.
+
+
+```python
+derivative_denominator = 1. / 0.2
+der_den = np.array([derivative_denominator])
+```
+
+Finally the data needs collecting in a list to pass to the training function.
+
+
+```python
+train_data = [t, t_m, t_p]
+```
+
+### Test data
+We also need to make some test data, although we don't need multiple combinations of this, i.e. `n_train = 1`.
+
+
+```python
+tt = generate_data([1. for i in range(n.n_s)])
+seed = np.random.randint(1e6)
+np.random.seed(seed)
+tt_m = generate_data([0.9 for i in range(n.n_p)], train = True)
+np.random.seed(seed)
+tt_p = generate_data([1.1 for i in range(n.n_p)], train = True)
+np.random.seed()
+test_data = [tt, tt_m, tt_p]
+```
+
+### Data visualisation
+We can simply plot some of the data to see what it looks like.
+
+
+```python
+fig, ax = plt.subplots(1, 2, figsize = (20, 12))
+plt.subplots_adjust(wspace = 0)
+ax[0].imshow(t[np.random.randint(n_train * n.n_s), :, :, 0])
+ax[0].set_xticks([])
+ax[0].set_yticks([])
+ax[0].set_xlabel('Training image')
+ax[1].imshow(tt[np.random.randint(n.n_s), :, :, 0])
+ax[1].set_xticks([])
+ax[1].set_yticks([])
+ax[1].set_xlabel('Test image');
+```
+
+
+![png](figures/output_29_0.png)
+
+
+## Train the network
+With the data we can now easily train the network. The train function takes in the training data (and the test data if you want to test - `test_data = None` can be used if you don't want to test, in which case the function only returns one list).<br><br>
+As well as the data, the function needs the number of epochs, `num_epochs`, the number of combinations of data, `n_train`, the number of batches, `num_batches < num_epochs`, the fraction of neurons kept when using dropout `keep_rate`, and the denominator for the derivative calculated earlier, `der_den`.
+
+
+```python
+train_F, test_F = n.train(train_data = train_data, num_epochs = 1500, n_train = n_train, num_batches = 1, keep_rate = 0.8, der_den = der_den, test_data = test_data)
+```
+
+    100%|██████████| 1500/1500 [04:32<00:00,  5.51it/s, detF=79.2, detF_test=51.2]      
+
+
+The output of the the train function is a list of the determinant of the Fisher information at the end of each epoch of training on the train data, and the same on the test data if test data is provided.<br><br>
+These can be plotted, along with the loss function which is simply
+$$\Lambda = -\frac{1}{2}|F|^2.$$
+
+
+```python
+train_F = np.array(train_F)
+test_F = np.array(test_F)
+fig, ax = plt.subplots(2, 1, sharex = True, figsize = (10, 14))
+plt.subplots_adjust(hspace = 0)
+end = len(train_F)
+epochs = np.arange(end)
+a, = ax[0].plot(epochs, -0.5 * train_F[:end]**2, label = 'Training data')
+b, = ax[0].plot(epochs, -test_F[:end]**2, label = 'Test data')
+ax[0].legend(frameon = False)
+ax[0].set_ylabel('Loss')
+ax[1].plot(epochs, train_F[:end])
+ax[1].plot(epochs, test_F[:end])
+ax[1].set_ylabel('$|\mathcal{F}|$')
+ax[1].set_xlabel('Number of epochs')
+ax[1].set_xlim([0, len(epochs)]);
+```
+
+
+![png](figures/output_33_0.png)
+
+
+## Resetting the network
+If you need to reset the weights and biases (for example if the covariance becomes zero and the weights become `NaN`) then you can call
+```python
+n.reinitialise_session()
+```
+
+## Approximate Bayesian computation
+We can now do ABC (or PMC-ABC) with our calculated summary. First we generate some simulated real data:
+
+
+```python
+real_data = generate_data(θ = [1.], train = False)
+```
+
+We can plot this real data to see what it looks like.
+
+
+```python
+fig, ax = plt.subplots(1, 1, figsize = (10, 12))
+ax.imshow(real_data[0, :, :, 0])
+ax.set_xticks([])
+ax.set_yticks([])
+ax.set_xlabel('Simulated real image');
+```
+
+
+![png](figures/output_38_0.png)
+
+
+### Calculate Fisher information matrix
+We calculate the Fisher information matrix by running the test data through the network. We need to shuffle and get a combination of the data before feeding it through the graph so that it has the correct shape.
+
+
+```python
+ttd = n.shuffle(data = test_data[0], data_m = test_data[1], data_p = test_data[2], n_train = 1)
+tt, tt_m, tt_p = n.get_combination_data(data = ttd, combination = 0, n_batches = 1)
+F = n.sess.run(n.F, feed_dict = {n.x: tt, n.x_m: tt_m, n.x_p: tt_p, n.dropout: 1., n.dd: der_den})
+```
+
+### ABC
+We now perform ABC by drawing 100000 random samples from the prior. We define the upper and lower bounds of a uniform prior to be 0 and 10. Only a uniform prior is implemented at the moment. From the samples we create simulations at each parameter value and feed each simulation through the network to get summaries. The summaries are compared to the summary of the real data to find the distances which can be used to accept or reject points.
+Because the simulations are created within the ABC function then the generation function must be passed. This is why the generator should be of the form defined above, which takes only a list of parameter values and returns a simulation at each parameter.
+
+
+```python
+θ, summary, s, ρ = n.ABC(real_data = real_data, F = F, prior = [0, 10], draws = 100000, generate_simulation = generate_data, at_once = True)
+```
+
+If the simulations are going to be too large to make all at once the `at_once` option can be set to false which will create one simulation at a time.
+```python
+θ, summary, s, ρ = n.ABC(real_data = real_data, F = F, prior = [0, 10], draws = 100000, generate_simulation = generate_data, at_once = False)
+```
+
+### Accept or reject
+In ABC draws are accepted if the distance between the simulation summary and the simulation of the real data are "close", i.e. smaller than some ϵ value, which is chosen somewhat arbitrarily.
+
+
+```python
+ϵ = 10
+accept_indices = np.argwhere(ρ < ϵ)[:, 0]
+reject_indices = np.argwhere(ρ >= ϵ)[:, 0]
+```
+
+### Plot samples
+We can plot the output samples and the histogram of the accepted samples, which should peak around `θ = 1`. The monotonic function of all the output samples shows that the network has learned how to summarise the data.
+
+
+```python
+fig, ax = plt.subplots(2, 1, sharex = True, figsize = (10, 10))
+plt.subplots_adjust(hspace = 0)
+ax[0].scatter(θ[accept_indices] , s[accept_indices, 0], s = 1)
+ax[0].scatter(θ[reject_indices], s[reject_indices, 0], s = 1, alpha = 0.1)
+ax[0].plot([0, 10], [summary[0], summary[0]], color = 'black', linestyle = 'dashed')
+ax[0].set_ylabel('Network output', labelpad = 0)
+ax[0].set_xlim([0, 10])
+ax[1].hist(θ[accept_indices], np.linspace(0, 10, 100), histtype = u'step', normed = True, linewidth = 1.5, color = '#9467bd');
+ax[1].set_xlabel('$\\theta$')
+ax[1].set_ylabel('$\\mathcal{P}(\\theta|{\\bf d})$')
+ax[1].set_yticks([]);
+```
+
+
+![png](figures/output_47_0.png)
+
+
+## PMC-ABC
+Population Monte Carlo ABC is a way of reducing the number of draws by first sampling from a prior, accepting the closest 75% of the samples and weighting all the rest of the samples to create a new proposal distribution. The furthest 25% of the original samples are redrawn from the new proposal distribution. The furthest 25% of the simulation summaries are continually rejected and the proposal distribution updated until the number of draws needed accept all the 25% of the samples is much greater than this number of samples. This ratio is called the criterion. The inputs work in a very similar way to the `ABC` function above. If we want 1000 samples from the approximate distribution at the end of the PMC we need to set `num_keep = 1000`. The initial random draw (as in ABC above) initialises with `num_draws`, the larger this is the better proposal distribution will be on the first iteration.
+
+
+```python
+θ_, summary_, ρ_, s_, W, total_draws = n.PMC(real_data = real_data, F = F, prior = [0, 10], num_draws = 1000, num_keep = 1000, generate_simulation = generate_data, criterion = 0.1, at_once = True, samples = None)
+```
+
+    iteration = 32, current criterion = 0.0670465973851827, total draws = 77474, ϵ = 1.2557629644870758..
+
+If we want the PMC to continue for longer we can provide the output of PMC as an input as
+```python
+θ_, summary_, ρ_, s_, W, total_draws = n.PMC(real_data = real_data, F = F, prior = [0, 10], num_draws = 1000, num_keep = 1000, generate_simulation = generate_data, criterion = 0.001, at_once = True, samples = [θ_, summary_, ρ_, s_, W, total_draws])
+```
+Finally we can plot the accepted samples and plot their histogram.
+
+
+```python
+fig, ax = plt.subplots(2, 1, sharex = True, figsize = (10, 10))
+plt.subplots_adjust(hspace = 0)
+ax[0].scatter(θ_ , s_, s = 1)
+ax[0].plot([0, 10], [summary[0], summary[0]], color = 'black', linestyle = 'dashed')
+ax[0].set_ylabel('Network output', labelpad = 0)
+ax[0].set_xlim([0, 10])
+ax[0].set_ylim([np.min(s_), np.max(s_)])
+ax[1].hist(θ_, np.linspace(0, 10, 100), histtype = u'step', normed = True, linewidth = 1.5, color = '#9467bd');
+ax[1].set_xlabel('θ')
+ax[1].set_ylabel('$\\mathcal{P}(\\theta|{\\bf d})$')
+ax[1].set_yticks([]);
+```
+
+
+![png](figures/output_51_0.png)
+
