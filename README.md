@@ -34,10 +34,6 @@ import tensorflow as tf
 import IMNN
 ```
 
-    /Users/charnock/.pyenv/versions/anaconda3-5.0.0/lib/python3.6/site-packages/h5py/__init__.py:34: FutureWarning: Conversion of the second argument of issubdtype from `float` to `np.floating` is deprecated. In future, it will be treated as `np.float64 == np.dtype(float).type`.
-      from ._conv import register_converters as _register_converters
-
-
 ## Initiliase the neural network
 ### Define network parameters
 The network works with a base set of parameters which are<br>
