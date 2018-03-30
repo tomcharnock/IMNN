@@ -3,7 +3,7 @@
 Using neural networks, sufficient statistics can be obtained from data by maximising the Fisher information.
 
 When using this code please cite <a href="https://arxiv.org/abs/1802.03537">arXiv:1802.03537</a>.<br><br>
-The code in the paper can be downloaded as v1 or v1.1 of the code kept on zenodo:<br><br>
+The code in the paper can be downloaded as v1 or v1.1 of the code kept on zenodo:<br>
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.1175196.svg)](https://doi.org/10.5281/zenodo.1175196)
 <br>
 The code presented below is version two (and is much more powerful).
@@ -245,7 +245,10 @@ np.random.seed()
 ```
 
 We also need to get the denominator of the derivative which is given by the difference between the perturbed parameter values<br>
-<a href="https://www.codecogs.com/eqnedit.php?latex=\frac{\partial}{\partial\theta}&space;=&space;\frac{1}{1.1&space;-&space;0.9}." target="_blank"><img src="https://latex.codecogs.com/gif.latex?\frac{\partial}{\partial\theta}&space;=&space;\frac{1}{1.1&space;-&space;0.9}." title="\frac{\partial}{\partial\theta} = \frac{1}{1.1 - 0.9}." /></a><br>
+<p align="center">
+<a href="https://www.codecogs.com/eqnedit.php?latex=\frac{\partial}{\partial\theta}&space;=&space;\frac{1}{1.1&space;-&space;0.9}." target="_blank"><img src="https://latex.codecogs.com/gif.latex?\frac{\partial}{\partial\theta}&space;=&space;\frac{1}{1.1&space;-&space;0.9}." title="\frac{\partial}{\partial\theta} = \frac{1}{1.1 - 0.9}." /></a>
+</p>
+<br>
 This needs to be done for every parameter and kept in a numpy array.
 
 
@@ -293,9 +296,9 @@ ax[1].set_yticks([])
 ax[1].set_xlabel('Test image');
 ```
 
-
-![png](figures/output_29_0.png)
-
+<p align="center">
+    <img src="figures/output_29_0.png"/>
+</p>
 
 ## Train the network
 With the data we can now easily train the network. The train function takes in the training data (and the test data if you want to test - `test_data = None` can be used if you don't want to test, in which case the function only returns one list).<br><br>
@@ -311,7 +314,9 @@ train_F, test_F = n.train(train_data = train_data, num_epochs = 1500, n_train = 
 
 The output of the the train function is a list of the determinant of the Fisher information at the end of each epoch of training on the train data, and the same on the test data if test data is provided.<br><br>
 These can be plotted, along with the loss function which is simply<br>
+<p align="center">
 <a href="https://www.codecogs.com/eqnedit.php?latex=\Lambda&space;=&space;-\frac{1}{2}|F|^2." target="_blank"><img src="https://latex.codecogs.com/gif.latex?\Lambda&space;=&space;-\frac{1}{2}|F|^2." title="\Lambda = -\frac{1}{2}|F|^2." /></a>
+</p>
 
 ```python
 train_F = np.array(train_F)
@@ -331,9 +336,9 @@ ax[1].set_xlabel('Number of epochs')
 ax[1].set_xlim([0, len(epochs)]);
 ```
 
-
-![png](figures/output_33_0.png)
-
+<p align="center">
+    <img src="figures/output_33_0.png"/>
+</p>
 
 ## Resetting the network
 If you need to reset the weights and biases (for example if the covariance becomes zero and the weights become `NaN`) then you can call
@@ -360,9 +365,9 @@ ax.set_yticks([])
 ax.set_xlabel('Simulated real image');
 ```
 
-
-![png](figures/output_38_0.png)
-
+<p align="center">
+    <img src="figures/output_38_0.png"/>
+</p>
 
 ### Calculate Fisher information matrix
 We calculate the Fisher information matrix by running the test data through the network. We need to shuffle and get a combination of the data before feeding it through the graph so that it has the correct shape.
@@ -416,9 +421,9 @@ ax[1].set_ylabel('$\\mathcal{P}(\\theta|{\\bf d})$')
 ax[1].set_yticks([]);
 ```
 
-
-![png](figures/output_47_0.png)
-
+<p align="center">
+    <img src="figures/output_47_0.png"/>
+</p>
 
 ## PMC-ABC
 Population Monte Carlo ABC is a way of reducing the number of draws by first sampling from a prior, accepting the closest 75% of the samples and weighting all the rest of the samples to create a new proposal distribution. The furthest 25% of the original samples are redrawn from the new proposal distribution. The furthest 25% of the simulation summaries are continually rejected and the proposal distribution updated until the number of draws needed accept all the 25% of the samples is much greater than this number of samples. This ratio is called the criterion. The inputs work in a very similar way to the `ABC` function above. If we want 1000 samples from the approximate distribution at the end of the PMC we need to set `num_keep = 1000`. The initial random draw (as in ABC above) initialises with `num_draws`, the larger this is the better proposal distribution will be on the first iteration.
@@ -451,6 +456,6 @@ ax[1].set_ylabel('$\\mathcal{P}(\\theta|{\\bf d})$')
 ax[1].set_yticks([]);
 ```
 
-
-![png](figures/output_51_0.png)
-
+<p align="center">
+    <img src="figures/output_51_0.png"/>
+</p>
