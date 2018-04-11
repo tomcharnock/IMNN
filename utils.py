@@ -288,7 +288,7 @@ class utils():
         key = 'input shape'
         value = u.isint_or_list([params, key], optional = 'if using a list the entries must be 3 positive integers.')
         if type(value) == int:
-            value = u.positive_integer([params, key])
+            value = [u.positive_integer([params, key])]
         else:
             if len(value) != 3:
                 print(key + ' must be a list of 3 positive integers. the length of the list is ' + str(len(value)) + '.')
