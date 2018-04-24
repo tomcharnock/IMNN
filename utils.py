@@ -586,7 +586,7 @@ class utils():
                             if type(samples[2]) == np.ndarray:
                                 if type(samples[3]) == np.ndarray:
                                     if type(samples[4]) == np.ndarray:
-                                        u.postive_integer(samples[5], key = 'element 5 of samples', optional = 'this should be the total number of draws so far.')
+                                        u.positive_integer(samples[5], key = 'element 5 of samples', optional = 'this should be the total number of draws so far.')
                                         return True
                                     print('element 4 of samples should be an array of the sample weights. current type is ' + str(type(samples[4])) + '.')
                                     sys.exit()
