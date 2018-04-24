@@ -582,7 +582,7 @@ class utils():
             if type(samples) == list:
                 if len(samples) == 6:
                     if type(samples[0]) == np.ndarray:
-                        if type(samples[1]) == nd.ndarray:
+                        if type(samples[1]) == np.ndarray:
                             if type(samples[2]) == np.ndarray:
                                 if type(samples[3]) == np.ndarray:
                                     if type(samples[4]) == np.ndarray:
