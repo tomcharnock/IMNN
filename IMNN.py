@@ -668,7 +668,7 @@ class IMNN():
                 else:
                     simulation_summaries = np.zeros([current_draws, n.n_summaries])
                     for theta in range(current_draws):
-                        simulation = generate_simulation([θ[theta]])
+                        simulation = generate_simulation([θ_temp[theta]])
                         simulation_summaries[theta] = n.sess.run(n.output, feed_dict = {n.x: simulation, n.dropout: 1.})[0]
                 difference = simulation_summaries - summary
                 ρ_temp = np.sqrt(np.einsum('ij,ij->i', difference, np.einsum('jk,ik->ij', F, difference)))
