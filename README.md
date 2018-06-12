@@ -355,7 +355,7 @@ n.save_network('data/saved_model')
 ## Loading the network
 You can load the network from a `TensorFlow` `meta` graph (from ``/.data/saved_model.meta`) using the function
 ```python
-n.restore_network('saved_model')
+n.restore_network('data/saved_model')
 ```
 Training can be continued after restoring the model - although the Adam optimiser might need to reacquaint itself.
 
