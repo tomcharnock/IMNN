@@ -191,14 +191,14 @@ where Λ is the loss function tensor. To use any other training scheme, such as 
 ```python
 n.backpropagate = tf.train.AdamOptimizer(η, β1, β2, ε).minimize(n.loss(n.F))
 ```
-after `setup(η)` to override the default minimisation routine. If you want to continue to use the default minimisation routine but want to change the learning rate without reinitialising you can run 
+after `setup(η)` to override the default minimisation routine. If you want to continue to use the default minimisation routine but want to change the learning rate without reinitialising you can run
 ```python
 n.training_scheme(η = new_η)
 ```
 
 ## Generate data
 Here were going to use a 2D image of Gaussian noise with zero mean and unknown variance to see if the network can learn to summarise this variance.<br><br>
-We start by defining a function to generate the data with the correct shape. This should be 
+We start by defining a function to generate the data with the correct shape. This should be
 ```
 data_shape = None + input shape
 ```
@@ -345,6 +345,19 @@ If you need to reset the weights and biases (for example if the covariance becom
 ```python
 n.reinitialise_session()
 ```
+
+## Saving the network
+You can save the network as a `TensorFlow` `meta` graph in the directory `/.data` called `saved_model.meta` using the function
+```python
+n.save_network('data/saved_model')
+```
+
+## Loading the network
+You can load the network from a `TensorFlow` `meta` graph (from ``/.data/saved_model.meta`) using the function
+```python
+n.restore_network('saved_model')
+```
+Training can be continued after restoring the model - although the Adam optimiser might need to reacquaint itself.
 
 ## Approximate Bayesian computation
 We can now do ABC (or PMC-ABC) with our calculated summary. First we generate some simulated real data:

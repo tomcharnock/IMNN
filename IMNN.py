@@ -2,7 +2,7 @@ import tensorflow as tf
 import numpy as np
 import tqdm
 import utils
-    
+
 class IMNN():
     def __init__(n, parameters):
         # INITIALISE NETWORK PARAMETERS
@@ -21,7 +21,7 @@ class IMNN():
         # check_prebuild_params(dict)             - checks that all parameters for prebuilt network are in dictionary
         # auto_initialise(float)        bool      - switch to choose whether to use constant weight variance
         # activation(dict)              tf func   - checks that TF activation function is allowed
-        #                               bool      
+        #                               bool
         #                               float/int
         # hidden_layers(dict, class)    list      - checks that hidden layers can be built into a network
         # initialise_variables()        11 Nones  - sets all other class variables to None
@@ -52,7 +52,7 @@ class IMNN():
         # dropout             setup() n tensor    - keep rate for dropout layer
         # output              setup() n tensor    - network output for simulations at fiducial parameter value
         # F                   setup() n tensor    - Fisher information matrix
-        # backpropagate       setup() n tf opt    - minimisation scheme for the network 
+        # backpropagate       setup() n tf opt    - minimisation scheme for the network
         # C                  Fisher() n tensor    - covariance of network outputs for fiducial simulations
         # dμdθ               Fisher() n tensor    - numerical derivative of the mean of network outputs
         #______________________________________________________________
@@ -90,11 +90,59 @@ class IMNN():
     def reinitialise_session(n):
         # REINITIALISE PARAMETERS
         #______________________________________________________________
+        # CALLED FROM (DEFINED IN IMNN.py)
+        # restore_network(string, float)          - restores network from a tensorflow saver metafile
+        #______________________________________________________________
         # VARIABLES
         # sess                        n session   - interactive tensorflow session
         #______________________________________________________________
         n.sess.run(tf.global_variables_initializer())
-        
+
+    def save_network(n, file):
+        # SAVE NETWORK AS A TENSORFLOW SAVER METAFILE
+        #______________________________________________________________
+        # INPUTS
+        # file                          string    - name of the file to reload (ending in .meta)
+        #______________________________________________________________
+        # VARIABLES
+        # saver                         tf op     - saving operation from tensorflow
+        #______________________________________________________________
+        saver = tf.train.Saver()
+        saver.save(n.sess, "./" + file)
+
+    def restore_network(n, file):
+        # RESTORES NETWORK FROM TENSORFLOW SAVER METAFILE
+        #______________________________________________________________
+        # INPUTS
+        # file                          string    - name of the file to reload (ending in .meta)
+        #______________________________________________________________
+        # VARIABLES
+        # sess                        n session   - interactive tensorflow session (with initialised parameters)
+        # loader                        tf op     - loading operation from tensorflow
+        # x                           n tensor    - fiducial simulation input tensor
+        # x_m                         n tensor    - below fiducial simulation input tensor
+        # x_p                         n tensor    - above fiducial simulation input tensor
+        # dd                          n tensor    - inverse difference between upper and lower parameter value
+        # dropout                     n tensor    - keep rate for dropout layer
+        # output                      n tensor    - network output for simulations at fiducial parameter value
+        # F                           n tensor    - Fisher information matrix
+        # backpropagate               n tf opt    - minimisation scheme for the network
+        # C                           n tensor    - covariance of network outputs for fiducial simulations
+        # dμdθ                        n tensor    - numerical derivative of the mean of network outputs
+        n.sess = tf.InteractiveSession()
+        loader = tf.train.import_meta_graph("./" + file + ".meta")
+        loader.restore(n.sess, file)
+        n.x = tf.get_default_graph().get_tensor_by_name("x:0")
+        n.x_m = tf.get_default_graph().get_tensor_by_name("x_m:0")
+        n.x_p = tf.get_default_graph().get_tensor_by_name("x_p:0")
+        n.dd = tf.get_default_graph().get_tensor_by_name("dd:0")
+        n.dropout = tf.get_default_graph().get_tensor_by_name("dropout:0")
+        n.output = tf.get_default_graph().get_tensor_by_name("output:0")
+        n.F = tf.get_default_graph().get_tensor_by_name("fisher_information:0")
+        n.C = tf.get_default_graph().get_tensor_by_name("central_covariance:0")
+        n.dμdθ = tf.get_default_graph().get_tensor_by_name("mean_derivative:0")
+        n.backpropagate = tf.get_default_graph().get_operation_by_name("Adam")
+
     def dense(n, input_tensor, l, dropout):
         # DENSE LAYER
         #______________________________________________________________
@@ -137,7 +185,7 @@ class IMNN():
             return tf.nn.dropout(n.activation(dense, n.α), dropout, name = 'dense_' + str(l))
         else:
             return tf.nn.dropout(n.activation(dense), dropout, name = 'dense_' + str(l))
-        
+
     def conv(n, input_tensor, l, dropout):
         # CONVOLUTIONAL LAYER
         #______________________________________________________________
@@ -223,7 +271,7 @@ class IMNN():
                     layer.append(n.dense(layer[-1], l, drop_val))
             if n.verbose: print(layer[-1])
         return layer[-1]
-    
+
     def Fisher(n, a, a_m, a_p, dd):
         # CALCULATE THE FISHER INFORMATION
         #______________________________________________________________
@@ -254,7 +302,7 @@ class IMNN():
         # a_p_                          tensor    - reshaped network outputs for upper parameter simulations
         # dμdθ                        n tensor    - numerical derivative of the mean of network outputs
         # F                             tensor    - Fisher information matrix
-        #______________________________________________________________ 
+        #______________________________________________________________
         a_ = tf.reshape(a, (-1, n.n_s, n.n_summaries), name = 'central_output')
         if n.verbose: print(a_)
         mean = tf.reduce_mean(a_, axis = 1, keepdims = True, name = 'central_mean')
@@ -274,7 +322,7 @@ class IMNN():
         F = tf.reduce_sum(tf.einsum('ijk,ilk->ijl', n.dμdθ, tf.einsum('ijk,ilk->ilj', Ci, n.dμdθ)), axis = 0, name = 'fisher_information')
         if n.verbose: print(F)
         return F
-    
+
     def loss(n, F):
         # CALCULATE THE LOSS FUNCTION
         #______________________________________________________________
@@ -291,10 +339,10 @@ class IMNN():
         #______________________________________________________________
         # VARIABLES
         # IFI                           tensor    - determinant of the Fisher information matrix
-        #______________________________________________________________ 
+        #______________________________________________________________
         IFI = tf.matrix_determinant(F)
         return tf.multiply(tf.constant(-0.5, dtype = n._FLOATX), tf.square(IFI))
-        
+
     def setup(n, η, network = None):
         # SETS UP GENERIC NETWORK
         #______________________________________________________________
@@ -307,11 +355,11 @@ class IMNN():
         # begin_session()                         - starts interactive tensorflow session and initialises variables
         #______________________________________________________________
         # FUNCTIONS (DEFINED IN utils.py)
-        # to_prebuild(func)                       - checks whether network builder is provided 
+        # to_prebuild(func)                       - checks whether network builder is provided
         #______________________________________________________________
         # INPUTS
         # η                             float     - learning rate
-        # network              optional func      - externally provided function for building network 
+        # network              optional func      - externally provided function for building network
         # inputs                      n int/list  - number of inputs (int) or shape of input (list)
         # n_params                    n int       - number of parameters in the model
         # prebuild                    n bool      - True to allow IMNN to build the network
@@ -322,23 +370,27 @@ class IMNN():
         # x_p                         n tensor    - above fiducial simulation input tensor
         # dd                          n tensor    - inverse difference between upper and lower parameter value
         # dropout                     n tensor    - keep rate for dropout layer
-        # output                      n tensor    - network output for simulations at fiducial parameter value
+        # output                        tensor    - network output for simulations at fiducial parameter value
+        # output                      n tensor    - network output for simulations at fiducial parameter value (named)
         # output_m                      tensor    - network output for simulations below fiducial parameter value
         # output_p                      tensor    - network output for simulations above fiducial parameter value
         # F                           n tensor    - Fisher information matrix
-        #______________________________________________________________ 
-        n.x = tf.placeholder(n._FLOATX, shape = [None] + n.inputs)
-        n.x_m = tf.placeholder(n._FLOATX, shape = [None] + n.inputs)
+        #______________________________________________________________
+        n.x = tf.placeholder(n._FLOATX, shape = [None] + n.inputs, name = "x")
+        n.x_m = tf.placeholder(n._FLOATX, shape = [None] + n.inputs, name = "x_m")
         n.x_m = tf.stop_gradient(n.x_m)
-        n.x_p = tf.placeholder(n._FLOATX, shape = [None] + n.inputs)
+        n.x_p = tf.placeholder(n._FLOATX, shape = [None] + n.inputs, name = "x_p")
         n.x_p = tf.stop_gradient(n.x_p)
-        n.dd = tf.placeholder(n._FLOATX, shape = (n.n_params))
-        n.dropout = tf.placeholder(n._FLOATX, shape = ())
+        n.dd = tf.placeholder(n._FLOATX, shape = (n.n_params), name = "dd")
+        n.dropout = tf.placeholder(n._FLOATX, shape = (), name = "dropout")
         if n.prebuild:
             network = n.build_network
         utils.utils().to_prebuild(network)
         with tf.variable_scope("IMNN") as scope:
-            n.output = network(n.x, n.dropout)
+            output = network(n.x, n.dropout)
+        n.output = tf.identity(output, name = "output")
+        print(n.output)
+        with tf.variable_scope("IMNN") as scope:
             scope.reuse_variables()
             output_m = network(n.x_m, n.dropout)
             scope.reuse_variables()
@@ -346,7 +398,7 @@ class IMNN():
         n.F = n.Fisher(n.output, output_m, output_p, n.dd)
         n.training_scheme(η)
         n.begin_session()
-        
+
     def training_scheme(n, η):
         # MINIMISATION SCHEME FOR BACKPROPAGATION
         #______________________________________________________________
@@ -362,9 +414,9 @@ class IMNN():
         #______________________________________________________________
         # VARIABLES
         # backpropagate               n tf opt    - minimisation scheme for the network
-        #______________________________________________________________ 
+        #______________________________________________________________
         η = utils.utils().isfloat(η, key = 'η')
-        n.backpropagate = tf.train.GradientDescentOptimizer(η).minimize(n.loss(n.F))
+        n.backpropagate = tf.train.AdamOptimizer(η).minimize(n.loss(n.F))
 
     def shuffle(n, data, data_m, data_p, n_train):
         # SHUFFLES DATA
@@ -391,7 +443,7 @@ class IMNN():
         # partial_shuffle               array     - indices of derivative simulations
         # d_m                           array     - shuffled lower fiducial parameter data
         # d_p                           array     - shuffled upper fiducial parameter data
-        #______________________________________________________________ 
+        #______________________________________________________________
         full_shuffle = np.arange(n.n_s * n_train)
         np.random.shuffle(full_shuffle)
         full_shuffle = full_shuffle.reshape(n_train, n.n_s)
@@ -402,7 +454,7 @@ class IMNN():
         d_m = np.array([data_m[partial_shuffle[i]] for i in range(n_train)])
         d_p = np.array([data_p[partial_shuffle[i]] for i in range(n_train)])
         return d, d_m, d_p
-    
+
     def get_combination_data(n, data, combination, n_batches):
         # GETS SINGLE COMBINATION OF DATA
         #______________________________________________________________
@@ -427,7 +479,7 @@ class IMNN():
         # t_p__                         array     - single combination of data above fiducial parameter value
         # t_p_                          array     - reshaped single combination of data above fiducial parameter value
         # t_p                           array     - more reshaped single combination of data above fiducial parameter value
-        #______________________________________________________________ 
+        #______________________________________________________________
         td_ = data[0][combination * n_batches: (combination + 1) * n_batches]
         t = td_.reshape([np.prod(td_.shape[: 2])] + list(td_.shape[2:]))
         t_m__ = data[1][combination * n_batches: (combination + 1) * n_batches]
@@ -435,9 +487,9 @@ class IMNN():
         t_m = t_m_.reshape([np.prod(t_m_.shape[:2])] + list(t_m_.shape[2:]))
         t_p__ = data[2][combination * n_batches: (combination + 1) * n_batches]
         t_p_ = t_p__.reshape([np.prod(t_p__.shape[:2])] + list(t_p__.shape[2:]))
-        t_p = t_p_.reshape([np.prod(t_p_.shape[:2])] + list(t_p_.shape[2:]))      
+        t_p = t_p_.reshape([np.prod(t_p_.shape[:2])] + list(t_p_.shape[2:]))
         return t, t_m, t_p
-        
+
     def train(n, train_data, num_epochs, n_train, num_batches, keep_rate, der_den, test_data = None):
         # TRAIN INFORMATION MAXIMISING NEURAL NETWORK
         #______________________________________________________________
@@ -469,7 +521,7 @@ class IMNN():
         # der_den                       array     - inverse difference between upper and lower parameter values
         # test_data            optional list      - data at fiducial, lower and upper parameter values for testing
         # sess                        n session   - interactive tensorflow session (with initialised parameters)
-        # backpropagate               n tf opt    - minimisation scheme for the network 
+        # backpropagate               n tf opt    - minimisation scheme for the network
         # x                           n tensor    - fiducial simulation input tensor
         # x_m                         n tensor    - below fiducial simulation input tensor
         # x_p                         n tensor    - above fiducial simulation input tensor
@@ -486,7 +538,7 @@ class IMNN():
         # t                             array     - reshaped single combination of data at fiducial parameter value
         # t_m                           array     - more reshaped single combination of data below fiducial parameter value
         # t_p                           array     - more reshaped single combination of data above fiducial parameter value
-        #______________________________________________________________ 
+        #______________________________________________________________
         utils.utils().check_data(n, train_data, n_train)
         do_test = utils.utils().check_data(n, test_data, 1, test = True)
         num_epochs = utils.utils().positive_integer(num_epochs, key = 'number of epochs')
@@ -501,9 +553,9 @@ class IMNN():
             tt, tt_m, tt_p = n.get_combination_data(ttd, 0, 1)
         tq = tqdm.trange(num_epochs)
         for epoch in tq:
-            
+
             td = n.shuffle(train_data[0], train_data[1], train_data[2], n_train)
-            for combination in range(n_train):  
+            for combination in range(n_train):
                 t, t_m, t_p = n.get_combination_data(td, combination, num_batches)
                 n.sess.run(n.backpropagate, feed_dict = {n.x: t, n.x_m: t_m, n.x_p: t_p, n.dropout: keep_rate, n.dd: der_den})
             train_F.append(np.linalg.det(n.sess.run(n.F, feed_dict = {n.x: t, n.x_m: t_m, n.x_p: t_p, n.dropout: 1., n.dd: der_den})))
@@ -516,7 +568,7 @@ class IMNN():
             return train_F, test_F
         else:
             return train_F
-        
+
     def ABC(n, real_data, F, prior, draws, generate_simulation, at_once = True):
         # PERFORM APPROXIMATE BAYESIAN COMPUTATION WITH RANDOM DRAWS FROM PRIOR
         #______________________________________________________________
@@ -527,7 +579,7 @@ class IMNN():
         #______________________________________________________________
         # RETURNS
         # array, float, array, array
-        # sampled parameter values, network summary of real data, summaries of simulations, 
+        # sampled parameter values, network summary of real data, summaries of simulations,
         #     distances between simulation summaries and real summary
         #______________________________________________________________
         # INPUTS
@@ -551,7 +603,7 @@ class IMNN():
         # simulation                    array     - generated simulation at indivdual parameter draw
         # difference                    array     - difference between summary of real data and summaries of simulations
         # distance                      array     - Euclidean distance between real summary and summaries of simulations
-        #______________________________________________________________ 
+        #______________________________________________________________
         summary = n.sess.run(n.output, feed_dict = {n.x: real_data, n.dropout: 1.})[0]
         θ = np.random.uniform(prior[0], prior[1], draws)
         if at_once:
@@ -624,7 +676,7 @@ class IMNN():
         # difference                    array     - difference between summary of real data and summaries of simulations
         # ρ_temp                        array     - distance between real and simulated summaries for proposed draws
         # accept_index                  array     - indices of proposed parameter values to keep
-        #______________________________________________________________ 
+        #______________________________________________________________
         continue_from_samples = utils.utils().to_continue(samples)
         utils.utils().enough(num_draws, num_keep)
         if continue_from_samples:
@@ -639,7 +691,7 @@ class IMNN():
             keep_index = np.argsort(np.abs(ρ))
             θ_ = θ[keep_index[: num_keep]]
             ρ_ = ρ[keep_index[: num_keep]]
-            s_ = s[keep_index[: num_keep]] 
+            s_ = s[keep_index[: num_keep]]
             W = np.ones(num_keep) / num_keep
             total_draws = num_draws
         pθ = 1./(prior[1] - prior[0])
