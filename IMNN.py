@@ -217,13 +217,18 @@ class IMNN():
         # conv                          tensor    - convolutional feature map (not activated)
         #______________________________________________________________
         previous_filters = int(input_tensor.get_shape()[-1])
-        weight_shape = (n.layers[l][1][0], n.layers[l][1][1], previous_filters, n.layers[l][0])
+        if len(n.layers[l][1]) == 2:
+            convolution = tf.nn.conv2d
+            weight_shape = (n.layers[l][1][0], n.layers[l][1][1], previous_filters, n.layers[l][0])
+        else:
+            convolution = tf.nn.conv3d
+            weight_shape = (n.layers[l][1][0], n.layers[l][1][1], n.layers[l][1][1], previous_filters, n.layers[l][0])
         bias_shape = (n.layers[l][0])
         if n.allow_init:
             n.wv = np.sqrt(2. / previous_filters)
         weights = tf.get_variable("weights", weight_shape, initializer = tf.random_normal_initializer(0., n.wv))
         biases = tf.get_variable("biases", bias_shape, initializer = tf.constant_initializer(n.bb))
-        conv = tf.add(tf.nn.conv2d(input_tensor, weights, [1] + n.layers[l][2] + [1], padding = n.layers[l][3]), biases)
+        conv = tf.add(convolution(input_tensor, weights, [1] + n.layers[l][2] + [1], padding = n.layers[l][3]), biases)
         if n.takes_α:
             return tf.nn.dropout(n.activation(conv, n.α), dropout, name = 'conv_' + str(l))
         else:

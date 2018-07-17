@@ -45,13 +45,13 @@ class utils():
         # VARIABLES
         # prebuild_parameters           list      - list of necessary parameters
         # key                           str       - key value to check
-        #______________________________________________________________        
+        #______________________________________________________________
         prebuild_parameters = ['wv', 'bb', 'activation', 'hidden layers']
         for key in prebuild_parameters:
             if key not in params.keys():
                 print(key + ' not found in parameter dictionary.')
                 sys.exit()
-            
+
     def get_params(u, value, optional):
         # GETS VALUE FROM DICTIONARY OR PASSES VALUE FORWARDS
         #______________________________________________________________
@@ -79,10 +79,10 @@ class utils():
         # optional                     str/other  - normally a string to use to output error warning
         #______________________________________________________________
         if type(value) is list:
-            if type(value[0]) is dict: 
+            if type(value[0]) is dict:
                 return value[0][value[1]], value[1]
         return value, optional
-    
+
     def isboolean(u, value, optional = '', key = ''):
         # CHECKS FOR BOOLEAN INPUT
         #______________________________________________________________
@@ -94,7 +94,7 @@ class utils():
         # returns boolean if input is boolean
         #______________________________________________________________
         # INPUTS
-        # value                        list/other - list with parameter and key to unpack or 
+        # value                        list/other - list with parameter and key to unpack or
         #                                           a value to pass forward
         # optional            optional str        - normally a string to use to output error warning
         # key                 optional str        - string to use to indicate key of value
@@ -108,7 +108,7 @@ class utils():
             print(key + ' must be a boolean. provided type is a ' + str(type(value)) + '. ' + optional)
             sys.exit()
         return value
-    
+
     def isint(u, value, optional = '', key = ''):
         # CHECKS FOR INTEGER INPUT
         #______________________________________________________________
@@ -121,7 +121,7 @@ class utils():
         # returns integer if input is integer
         #______________________________________________________________
         # INPUTS
-        # value                        list/other - list with parameter and key to unpack or 
+        # value                        list/other - list with parameter and key to unpack or
         #                                           a value to pass forward
         # optional            optional str        - normally a string to use to output error warning
         # key                 optional str        - string to use to indicate key of value
@@ -135,7 +135,7 @@ class utils():
             print(key + ' must be a integer. provided type is a ' + str(type(value)) + '. ' + optional)
             sys.exit()
         return value
-    
+
     def isfloat(u, value, optional = '', key = ''):
         # CHECKS FOR FLOAT INPUT
         #______________________________________________________________
@@ -147,7 +147,7 @@ class utils():
         # returns float if input is float
         #______________________________________________________________
         # INPUTS
-        # value                        list/other - list with parameter and key to unpack or 
+        # value                        list/other - list with parameter and key to unpack or
         #                                           a value to pass forward
         # optional            optional str        - normally a string to use to output error warning
         # key                 optional str        - string to use to indicate key of value
@@ -161,7 +161,7 @@ class utils():
             print(key + ' must be a float. provided type is a ' + str(type(value)) + '. ' + optional)
             sys.exit()
         return value
-    
+
     def positive_integer(u, value, optional = '', key = ''):
         # CHECKS FOR POSITIVE INTEGER
         #______________________________________________________________
@@ -177,7 +177,7 @@ class utils():
         # returns integer if input is positive integer
         #______________________________________________________________
         # INPUTS
-        # value                        list/other - list with parameter and key to unpack or 
+        # value                        list/other - list with parameter and key to unpack or
         #                                           a value to pass forward
         # optional            optional str        - normally a string to use to output error warning
         # key                 optional str        - string to use to indicate key of value
@@ -194,7 +194,7 @@ class utils():
             print(key + ' must be a positive integer. provided value is ' + str(value) + '. ' + optional)
             sys.exit()
         return value
-    
+
     def constrained_float(u, value, optional = '', key = ''):
         # CHECKS FOR FLOAT INPUT BETWEEN 0 AND 1
         #______________________________________________________________
@@ -213,7 +213,7 @@ class utils():
         # returns float if input is float between 0 and 1
         #______________________________________________________________
         # INPUTS
-        # value                        list/other - list with parameter and key to unpack or 
+        # value                        list/other - list with parameter and key to unpack or
         #                                           a value to pass forward
         # optional            optional str        - normally a string to use to output error warning
         # key                 optional str        - string to use to indicate key of value
@@ -233,7 +233,7 @@ class utils():
             print(key + ' must be a float between 0 and 1. provided value is ' + str(value) + '. ' + optional)
             sys.exit()
         return value
-    
+
     def isint_or_list(u, value, optional = '', key = ''):
         # CHECKS FOR INTEGER OR LIST
         #______________________________________________________________
@@ -246,7 +246,7 @@ class utils():
         # returns integer or list if input is an integer or a list
         #______________________________________________________________
         # INPUTS
-        # value                        list/other - list with parameter and key to unpack or 
+        # value                        list/other - list with parameter and key to unpack or
         #                                           a value to pass forward
         # optional            optional str        - normally a string to use to output error warning
         # key                 optional str        - string to use to indicate key of value
@@ -286,14 +286,14 @@ class utils():
         # i                            int        - counter for each dimension of input shape
         #______________________________________________________________
         key = 'input shape'
-        value = u.isint_or_list([params, key], optional = 'if using a list the entries must be 3 positive integers.')
+        value = u.isint_or_list([params, key], optional = 'if using a list the entries must be 3 or 4 positive integers.')
         if type(value) == int:
             value = [u.positive_integer([params, key])]
         else:
-            if len(value) != 3:
-                print(key + ' must be a list of 3 positive integers. the length of the list is ' + str(len(value)) + '.')
+            if len(value) < 3 or len(value) > 4:
+                print(key + ' must be a list of 3 or 4 positive integers. the length of the list is ' + str(len(value)) + '.')
                 sys.exit()
-            for i in range(3):
+            for i in range(len(value)):
                 value[i] = u.positive_integer(value[i], optional = 'the problem is at element ' + str(i) + '.', key = key)
         return value
 
@@ -338,7 +338,7 @@ class utils():
             return False
         else:
             return True
-        
+
     def activation(u, params):
         # CHECKS IF CHOSEN ACTIVATION FUNCTION IS ALLOWED AND WHETHER EXTRA PARAMETERS ARE NEEDED
         #______________________________________________________________
@@ -361,7 +361,7 @@ class utils():
         # VARIABLES
         # value                         tf func   - tensorflow activation function
         # takes_α                       bool      - True if activation function needs an input parameter
-        # α                             float/int - value of the parameter needed for the activation function 
+        # α                             float/int - value of the parameter needed for the activation function
         #______________________________________________________________
         value = params['activation']
         takes_α = False
@@ -405,7 +405,7 @@ class utils():
             return value, takes_α, α
         print('the requested activation function is not implemented. it probably just needs adding to utils.activation().')
         sys.exit()
-        
+
     def hidden_layers(u, params, n):
         # CHECKS ARCHITECTURE OF PREBUILT NEURAL NETWORK
         #______________________________________________________________
@@ -444,13 +444,13 @@ class utils():
         value = params[key]
         if value is None:
             layers = [n.inputs] + [n.n_summaries]
-            if n.verbose: print('network architecture is ' + str(layers) + '.')           
+            if n.verbose: print('network architecture is ' + str(layers) + '.')
             return layers
         if type(value) != list:
             print(key + ' must be a list of hidden layers. provided type is ' + str(type(value)) + '.')
         if len(value) == 0:
             layers = [n.inputs] + [n.n_summaries]
-            if n.verbose: print('network architecture is ' + str(layers) + '.')           
+            if n.verbose: print('network architecture is ' + str(layers) + '.')
             return layers
         hidden_layer = []
         for i in range(len(value)):
@@ -462,20 +462,20 @@ class utils():
                     print('each convoultional layer in ' + key + ' must be a list of a positive integer (number of filters), two lists which contain two integers (x and y kernal size in the first list and x and y strides in the second) and finally a string of either "SAME" or "VALID" for padding type). the length of the list is ' + str(len(inner_value)) + '. an integer value can also be used.')
                     sys.exit()
                 for j in range(4):
-                    if j == 0: 
+                    if j == 0:
                         inner_value[j] = u.positive_integer(inner_value[j], optional = 'the problem is at element ' + str(i) + ' which should be an integer.', key = key)
                     elif (j == 1) or (j == 2):
                         if type(inner_value[j]) != list:
                             print('element ' + str(j) + ' of hidden layer ' + str(i + 1) + ' must be a list. provided type is ' + str(type(inner_value[j])) + '.')
                             sys.exit()
-                        if len(inner_value[j]) != 2:
+                        if len(inner_value[j]) < 2 or len(inner_value[j]) > 3:
                             if j == 1:
-                                print('element 1 of hidden layer ' + str(i + 1) + ' list must be a list with two positive integers which describe the shape of the x and y kernel in the convolution. the provided length is ' + str(len(inner_value[j])) + '.')
+                                print('element 1 of hidden layer ' + str(i + 1) + ' list must be a list with two or three positive integers for 2D or 3D convolutions which describe the shape of the x and y kernel in the convolution. the provided length is ' + str(len(inner_value[j])) + '.')
                                 sys.exit()
                             if j == 2:
-                                print('element 2 of hidden layer ' + str(i + 1) + 'list must be a list with two positive integers which describe the strides in the x and y direction in the convolution. the provided length is ' + str(len(inner_value[j])) + '.')
-                                sys.exit() 
-                        for k in range(2): 
+                                print('element 2 of hidden layer ' + str(i + 1) + 'list must be a list with two or three positive integers for 2D or 3D convolutions which describe the strides in the x and y direction in the convolution. the provided length is ' + str(len(inner_value[j])) + '.')
+                                sys.exit()
+                        for k in range(len(inner_value[j])):
                             inner_value[j][k] = u.positive_integer(inner_value[j][k], optional = 'the problem is at element ' + str(k) + ' of element ' + str(j) + ' of hidden layer ' + str(i + 1) + '.', key = 'hidden layer')
                     else:
                         if type(inner_value[j]) != str:
@@ -488,7 +488,7 @@ class utils():
         layers = [n.inputs] + hidden_layer + [n.n_summaries]
         if n.verbose: print('network architecture is ' + str(layers) + '.')
         return layers
-            
+
     def initialise_variables(u):
         # INITIALISES ALL SHARED NETWORK PARAMETERS TO NONE
         #______________________________________________________________
@@ -508,7 +508,7 @@ class utils():
         # setup(optional func)                    - sets up the network and initialises it
         #______________________________________________________________
         # INPUTS
-        # network                       func      - function for hidden layers of the network 
+        # network                       func      - function for hidden layers of the network
         #______________________________________________________________
         if network is None:
             print('network architecture needs to be prebuilt')
@@ -558,7 +558,7 @@ class utils():
                     sys.exit()
         if test:
             return True
-        
+
     def to_continue(u, samples):
         # CHECKS LIST OF NECESSARY PMC COMPONENTS TO SEE WHETHER PMC CAN CONTINUE
         #______________________________________________________________
@@ -622,7 +622,7 @@ class utils():
         # key_1                         str       - name of lower valued entry
         # key_2                         str       - name of higher valued entry
         #______________________________________________________________
-        if modulus: 
+        if modulus:
             key_1 = 'num_batches'
             key_2 = 'n_train'
         else:
