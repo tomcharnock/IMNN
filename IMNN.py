@@ -82,9 +82,12 @@ class IMNN():
         # setup(optional func)                    - builds generic or auto built network
         #______________________________________________________________
         # VARIABLES
-        # sess                        n session   - interactive tensorflow session (with initialised parameters)
+        # config                                  - tensorflow GPU configuration options
+        # sess                        n session   - tensorflow session (with initialised parameters)
         #______________________________________________________________
-        n.sess = tf.InteractiveSession()
+        config = tf.ConfigProto()
+        config.gpu_options.allow_growth = True
+        n.sess = tf.Session(config = config)
         n.sess.run(tf.global_variables_initializer())
 
     def reinitialise_session(n):
