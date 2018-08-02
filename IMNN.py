@@ -17,6 +17,7 @@ class IMNN():
         # number_of_derivative_simulations(dict, class)
         #                                         - calculates the number of simulations to use for numerical derivative
         # inputs(dict)                  int/list  - checks shape of network input
+        # check_save_file(dict)         str/None  - checks that file name is a string or None
         # isfloat(list)                 float     - checks that parameter is a float
         # check_prebuild_params(dict)             - checks that all parameters for prebuilt network are in dictionary
         # auto_initialise(float)        bool      - switch to choose whether to use constant weight variance
@@ -37,12 +38,13 @@ class IMNN():
         # inputs                      n int/list  - number of inputs (int) or shape of input (list)
         # η                           n float     - learning rate
         # prebuild                    n bool      - True to allow IMNN to build the network
+        # save_file                   n str/None  - Name to save or load graph. None does not save graph
         # wv                          n float     - weight variance to initialise all weights
         # allow_init                  n bool      - True if nw < 0 so network calculates weight variance
         # bb                          n float     - constant bias initialiser value
         # activation                  n tf func   - activation function to use
-        # n.take_α                    n bool      - True is an extra parameter is needed in the activation function
-        # n.α                         n float/int - extra parameter if needed for activation function (can be None)
+        # take_α                      n bool      - True is an extra parameter is needed in the activation function
+        # α                           n float/int - extra parameter if needed for activation function (can be None)
         # layers                      n list      - contains the neural architecture of the network
         # sess        begin_session() n session   - interactive tensorflow session (with initialised parameters)
         # x                   setup() n tensor    - fiducial simulation input tensor
@@ -66,6 +68,7 @@ class IMNN():
         n.n_summaries = u.positive_integer([parameters, 'number of summaries'])
         n.inputs = u.inputs(parameters)
         n.prebuild = u.isboolean([parameters, 'prebuild'])
+        n.save_file = u.check_save_file([parameters, 'save file'])
         if n.prebuild:
             u.check_prebuild_params(parameters)
             n.wv = u.isfloat([parameters, 'wv'])
@@ -80,6 +83,7 @@ class IMNN():
         #______________________________________________________________
         # CALLED FROM (DEFINED IN IMNN.py)
         # setup(optional func)                    - builds generic or auto built network
+        # save_network(optional Bool)             - saves the network (if n.save_file is not None)
         #______________________________________________________________
         # VARIABLES
         # config                                  - tensorflow GPU configuration options
@@ -89,6 +93,7 @@ class IMNN():
         config.gpu_options.allow_growth = True
         n.sess = tf.Session(config = config)
         n.sess.run(tf.global_variables_initializer())
+        n.save_network(first_time = True)
 
     def reinitialise_session(n):
         # REINITIALISE PARAMETERS
@@ -101,19 +106,24 @@ class IMNN():
         #______________________________________________________________
         n.sess.run(tf.global_variables_initializer())
 
-    def save_network(n, file):
+    def save_network(n, first_time = False):
         # SAVE NETWORK AS A TENSORFLOW SAVER METAFILE
         #______________________________________________________________
         # INPUTS
-        # file                          string    - name of the file to reload (ending in .meta)
+        # save_file                   n str/None  - name of the file to reload (ending in .meta)
+        # first_time                    bool      - whether to save the meta graph or not
         #______________________________________________________________
         # VARIABLES
-        # saver                         tf op     - saving operation from tensorflow
+        # saver                       n tf op     - saving operation from tensorflow
         #______________________________________________________________
-        saver = tf.train.Saver()
-        saver.save(n.sess, "./" + file)
+        if n.save_file is not None:
+            if first_time:
+                n.saver = tf.train.Saver()
+                n.saver.save(n.sess, "./" + n.save_file)
+            else:
+                n.saver.save(n.sess, "./" + n.save_file, write_meta_graph = False)
 
-    def restore_network(n, file):
+    def restore_network(n):
         # RESTORES NETWORK FROM TENSORFLOW SAVER METAFILE
         #______________________________________________________________
         # INPUTS
@@ -121,6 +131,7 @@ class IMNN():
         #______________________________________________________________
         # VARIABLES
         # sess                        n session   - interactive tensorflow session (with initialised parameters)
+        # save_file                   n string    - name of the file to reload (ending in .meta)
         # loader                        tf op     - loading operation from tensorflow
         # x                           n tensor    - fiducial simulation input tensor
         # x_m                         n tensor    - below fiducial simulation input tensor
@@ -132,19 +143,22 @@ class IMNN():
         # backpropagate               n tf opt    - minimisation scheme for the network
         # C                           n tensor    - covariance of network outputs for fiducial simulations
         # dμdθ                        n tensor    - numerical derivative of the mean of network outputs
-        n.sess = tf.InteractiveSession()
-        loader = tf.train.import_meta_graph("./" + file + ".meta")
-        loader.restore(n.sess, file)
-        n.x = tf.get_default_graph().get_tensor_by_name("x:0")
-        n.x_m = tf.get_default_graph().get_tensor_by_name("x_m:0")
-        n.x_p = tf.get_default_graph().get_tensor_by_name("x_p:0")
-        n.dd = tf.get_default_graph().get_tensor_by_name("dd:0")
-        n.dropout = tf.get_default_graph().get_tensor_by_name("dropout:0")
-        n.output = tf.get_default_graph().get_tensor_by_name("output:0")
-        n.F = tf.get_default_graph().get_tensor_by_name("fisher_information:0")
-        n.C = tf.get_default_graph().get_tensor_by_name("central_covariance:0")
-        n.dμdθ = tf.get_default_graph().get_tensor_by_name("mean_derivative:0")
-        n.backpropagate = tf.get_default_graph().get_operation_by_name("Adam")
+        if n.save_file is not None:
+            config = tf.ConfigProto()
+            config.gpu_options.allow_growth = True
+            n.sess = tf.Session(config = config)
+            loader = tf.train.import_meta_graph("./" + n.save_file + ".meta")
+            loader.restore(n.sess, n.save_file)
+            n.x = tf.get_default_graph().get_tensor_by_name("x:0")
+            n.x_m = tf.get_default_graph().get_tensor_by_name("x_m:0")
+            n.x_p = tf.get_default_graph().get_tensor_by_name("x_p:0")
+            n.dd = tf.get_default_graph().get_tensor_by_name("dd:0")
+            n.dropout = tf.get_default_graph().get_tensor_by_name("dropout:0")
+            n.output = tf.get_default_graph().get_tensor_by_name("output:0")
+            n.F = tf.get_default_graph().get_tensor_by_name("fisher_information:0")
+            n.C = tf.get_default_graph().get_tensor_by_name("central_covariance:0")
+            n.dμdθ = tf.get_default_graph().get_tensor_by_name("mean_derivative:0")
+            n.backpropagate = tf.get_default_graph().get_operation_by_name("Adam")
 
     def dense(n, input_tensor, l, dropout):
         # DENSE LAYER
@@ -510,6 +524,7 @@ class IMNN():
         # get_combination_data(list, int, int)
         #                               array, array, array
         #                                         - gets individual combination of data
+        # save_network(optional Bool)             - saves the network (if n.save_file is not None)
         #______________________________________________________________
         # FUNCTIONS (DEFINED IN utils.py)
         # check_data(class, list, int, optional bool)
@@ -572,6 +587,8 @@ class IMNN():
                 tq.set_postfix(detF = train_F[-1], detF_test = test_F[-1])
             else:
                 tq.set_postfix(detF = train_F[-1])
+        if n.save_file is not None:
+            n.save_network()
         if do_test:
             return train_F, test_F
         else:
