@@ -297,6 +297,35 @@ class utils():
                 value[i] = u.positive_integer(value[i], optional = 'the problem is at element ' + str(i) + '.', key = key)
         return value
 
+    def check_save_file(u, value, optional = '', key = ''):
+        # CHECKS FOR BOOLEAN INPUT
+        #______________________________________________________________
+        # CALLED FROM (DEFINED IN IMNN.py)
+        # __init__(dict)                          - initialises IMNN
+        #______________________________________________________________
+        # RETURNS
+        # bool
+        # returns boolean if input is boolean
+        #______________________________________________________________
+        # INPUTS
+        # value                        list/other - list with parameter and key to unpack or
+        #                                           a value to pass forward
+        # optional            optional str        - normally a string to use to output error warning
+        # key                 optional str        - string to use to indicate key of value
+        #______________________________________________________________
+        # FUNCTIONS
+        # get_params(list/other, str/other)
+        #                             other       - unpacks dictionary or passes value forward
+        #______________________________________________________________
+        value, key = u.get_params(value, key)
+        if value is None:
+            return value
+        else:
+            if type(value) != string:
+                print(key + ' must be a string. provided type is a ' + str(type(value)) + '. ' + optional)
+                sys.exit()
+            return value
+
     def number_of_derivative_simulations(u, params, n):
         # CALCULATES NUMBER OF SIMULATIONS TO USE FOR NUMERICAL DERIVATIVE (PER COMBINATION)
         #______________________________________________________________
