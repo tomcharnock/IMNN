@@ -317,14 +317,15 @@ class utils():
         # get_params(list/other, str/other)
         #                             other       - unpacks dictionary or passes value forward
         #______________________________________________________________
-        value, key = u.get_params(value, key)
-        if value is None:
-            return value
+        if value[1] in value[0].keys():
+            if type(value[0][value[1]]) != str:
+                print('to save the model "save file" must be a string. provided type is a ' + str(type(value[0][value[1]])) + '.')
+                return None
+            print("saving model as " + str(value[0][value[1]] + ".meta"))
+            return value[0][value[1]]
         else:
-            if type(value) != string:
-                print(key + ' must be a string. provided type is a ' + str(type(value)) + '. ' + optional)
-                sys.exit()
-            return value
+            print('model not being saved')
+            return None
 
     def number_of_derivative_simulations(u, params, n):
         # CALCULATES NUMBER OF SIMULATIONS TO USE FOR NUMERICAL DERIVATIVE (PER COMBINATION)
