@@ -71,10 +71,10 @@ class IMNN():
         u.check_params(parameters)
         n.verbose = u.isboolean([parameters, 'verbose'])
         n.inputs = u.inputs(parameters)
-        n.preload_data = u.check_preloaded(parameters, n)
         n.n_s = u.positive_integer([parameters, 'number of simulations'])
         n.n_params = u.positive_integer([parameters, 'number of parameters'])
         n.n_p = u.number_of_derivative_simulations(parameters, n)
+        n.preload_data = u.check_preloaded(parameters, n)
         if n.preload_data is not None:
             n.n_batch = u.positive_divisible(parameters, 'number of combinations', n.n_s, 'number of simulations')
             n.n_p_batch = u.positive_divisible(parameters, 'number of combinations', n.n_p, 'number of derivative simulations')
