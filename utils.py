@@ -166,6 +166,8 @@ class utils():
         # CHECKS FOR POSITIVE INTEGER
         #______________________________________________________________
         # CALLED FROM (DEFINED IN utils.py)
+        # positive_divisible(dict, str, str)
+        #                              int        - checks quantity is divisible by another quantity and output is positive integer
         # inputs(dict)                 int/list   - returns the input shape as list or size as int
         # hidden_layers(dict, class)   list       - returns the network architecture as a list
         #______________________________________________________________
@@ -262,6 +264,35 @@ class utils():
                 sys.exit()
         return value
 
+    def positive_divisible(u, params, key, check, check_key):
+        # CHECKS THAT INPUT IS INTEGER DIVISIBLE AND POSITIVE DEFINITE
+        #______________________________________________________________
+        # CALLED FROM (DEFINED IN IMNN.py)
+        # __init__(dict)                          - initialises IMNN
+        #______________________________________________________________
+        # RETURNS
+        # int
+        # returns integer for the batch size or the batch size for derivatives
+        #______________________________________________________________
+        # INPUTS
+        # params                       dict       - dictionary of parameters
+        # key                          str        - denominator value
+        # check                        int        - numerator value
+        # check_key                    str        - numerator key
+        #______________________________________________________________
+        # FUNCTIONS (DEFINED IN utils.py)
+        # positive_integer(int, optional str, optional str)
+        #                              int        - returns an integer if input is positive integer
+        #______________________________________________________________
+        # VARIABLES
+        #______________________________________________________________
+        if float(check // params[key]) != check / params[key]:
+            print(check_key + " / " + key + " is not an integer")
+            sys.exit()
+        else:
+            u.positive_integer(check // params[key], key = check_key + " / " + key)
+        return check // params[key]
+
     def inputs(u, params):
         # CHECKS SHAPE OR SIZE OF INPUT
         #______________________________________________________________
@@ -296,6 +327,46 @@ class utils():
             for i in range(len(value)):
                 value[i] = u.positive_integer(value[i], optional = 'the problem is at element ' + str(i) + '.', key = key)
         return value
+
+    def check_preloaded(u, params, n):
+        # CHECKS SHAPE OF DATA TO BE PRELOADED OR RETURNS NONE IF NOT PRELOADING
+        #______________________________________________________________
+        # CALLED FROM (DEFINED IN IMNN.py)
+        # __init__(dict)                          - initialises IMNN
+        #______________________________________________________________
+        # RETURNS
+        # dict/None
+        # returns the data to be preloaded or None if not preloading
+        #______________________________________________________________
+        # INPUTS
+        # params                       dict       - dictionary of parameters
+        # n_inputs                   n int        - shape of input
+        # n_params                   n int        - number of parameters in model
+        #______________________________________________________________
+        # VARIABLES
+        # inputs                       list       - list form of n.inputs for checking shape
+        #______________________________________________________________
+        if params['preload data'] is None:
+            print("Not preloading data to GPU")
+            return None
+        else:
+            if type(params['preload data']) != dict:
+                print("preload data must be a dictionary containing the central values and the derivatives for training but instead is type" + string(type(params["preload data"])))
+            else:
+                if params['preload data']['x_central'].shape[1:] != tuple(n.inputs):
+                    print("The central values of the training data must have the same shape as the input (" + str(n.inputs) + "), but has shape " + str(params['preload data']['x_central'].shape[1:]))
+                    sys.exit()
+                if type(n.inputs) == int:
+                    inputs = [n.inputs]
+                else:
+                    inputs = n.inputs
+                if params['preload data']['x_m'].shape[1:] != tuple([n.n_params] + inputs):
+                    print("The lower values of the training data must have the same shape as the input (" + str([n.n_params] + inputs) + "), but has shape " + str(params['preload data']['x_m'].shape[1:]))
+                    sys.exit()
+                if params['preload data']['x_p'].shape[1:] != tuple([n.n_params] + inputs):
+                    print("The upper values of the training data must have the same shape as the input (" + str([n.n_params] + inputs) + "), but has shape " + str(params['preload data']['x_p'].shape[1:]))
+                    sys.exit()
+        return params['preload data']
 
     def check_save_file(u, value, optional = '', key = ''):
         # CHECKS FOR BOOLEAN INPUT
@@ -529,7 +600,7 @@ class utils():
         # list
         # returns a list of None for each unset shared network parameter
         #______________________________________________________________
-        return [None for i in range(11)]
+        return [None for i in range(14)]
 
     def to_prebuild(u, network):
         # INITIALISES ALL SHARED NETWORK PARAMETERS TO NONE

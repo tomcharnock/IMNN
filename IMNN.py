@@ -17,6 +17,7 @@ class IMNN():
         # number_of_derivative_simulations(dict, class)
         #                                         - calculates the number of simulations to use for numerical derivative
         # inputs(dict)                  int/list  - checks shape of network input
+        # check_preloaded(dict, class)  dict/None - checks preloaded data or returns None if not preloading
         # check_save_file(dict)         str/None  - checks that file name is a string or None
         # isfloat(list)                 float     - checks that parameter is a float
         # check_prebuild_params(dict)             - checks that all parameters for prebuilt network are in dictionary
@@ -32,10 +33,14 @@ class IMNN():
         # _FLOATX                     n tf type   - set TensorFlow types to 32 bit (for GPU)
         # verbose                     n bool      - True to print outputs such as shape of tensors
         # n_params                    n int       - number of parameters in the model
-        # n_s                         n int       - number of simulations in each combination
+        # n_s                         n int       - total number of simulations
+        # n_batch                     n int       - number of simulations per combination
         # n_p                         n int       - number of differentiation simulations
+        # n_p_batch                   n int       - number of derivative simulations per combination
+        # n_train                     n int       - number of combinations to split simulations into
         # n_summaries                 n int       - number of outputs from the network
         # inputs                      n int/list  - number of inputs (int) or shape of input (list)
+        # preload_data                n dict/None - training data to be preloaded to GPU
         # η                           n float     - learning rate
         # prebuild                    n bool      - True to allow IMNN to build the network
         # save_file                   n str/None  - Name to save or load graph. None does not save graph
@@ -57,16 +62,23 @@ class IMNN():
         # backpropagate       setup() n tf opt    - minimisation scheme for the network
         # C                  Fisher() n tensor    - covariance of network outputs for fiducial simulations
         # dμdθ               Fisher() n tensor    - numerical derivative of the mean of network outputs
+        # central_indices     setup() n tensor    - list of indices to select preloaded central data at
+        # derivative_indices  setup() n tensor    - list of indices to select preloaded derivative data at
+        # test_F              setup() n tensor    - Fisher information from test data
         #______________________________________________________________
         u = utils.utils()
         n._FLOATX = tf.float32
         u.check_params(parameters)
         n.verbose = u.isboolean([parameters, 'verbose'])
         n.n_s = u.positive_integer([parameters, 'number of simulations'])
+        n.n_batch = u.positive_divisible(parameters, 'number of combinations', n.n_s, 'number of simulations')
         n.n_params = u.positive_integer([parameters, 'number of parameters'])
         n.n_p = u.number_of_derivative_simulations(parameters, n)
+        n.n_p_batch = u.positive_divisible(parameters, 'number of combinations', n.n_p, 'number of derivative simulations')
+        n.n_train = parameters['number of combinations']
         n.n_summaries = u.positive_integer([parameters, 'number of summaries'])
         n.inputs = u.inputs(parameters)
+        n.preload_data = u.check_preloaded(parameters, n)
         n.prebuild = u.isboolean([parameters, 'prebuild'])
         n.save_file = u.check_save_file([parameters, 'save file'])
         if n.prebuild:
@@ -76,7 +88,7 @@ class IMNN():
             n.bb = u.isfloat([parameters, 'bb'])
             n.activation, n.takes_α, n.α = u.activation(parameters)
             n.layers = u.hidden_layers(parameters, n)
-        n.sess, n.x, n.x_m, n.x_p, n.dd, n.dropout, n.output, n.F, n.backpropagate, n.C, n.dμdθ = u.initialise_variables()
+        n.sess, n.x, n.x_m, n.x_p, n.dd, n.dropout, n.output, n.F, n.backpropagate, n.C, n.dμdθ, n.central_indices, n.derivative_indices, n.test_F = u.initialise_variables()
 
     def begin_session(n):
         # BEGIN TENSORFLOW SESSION AND INITIALISE PARAMETERS
@@ -106,7 +118,7 @@ class IMNN():
         #______________________________________________________________
         n.sess.run(tf.global_variables_initializer())
 
-    def save_network(n, first_time = False):
+    def save_network(n, file_name = None, first_time = False):
         # SAVE NETWORK AS A TENSORFLOW SAVER METAFILE
         #______________________________________________________________
         # INPUTS
@@ -116,12 +128,19 @@ class IMNN():
         # VARIABLES
         # saver                       n tf op     - saving operation from tensorflow
         #______________________________________________________________
-        if n.save_file is not None:
+        if (n.save_file is None and file_name is not None):
+            save_file = file_name
+        elif n.save_file is not None:
+            save_file = n.save_file
+        else:
+            save_file = None
+        if save_file is not None:
+            print('saving the graph as ' + save_file + '.meta')
             if first_time:
                 n.saver = tf.train.Saver()
-                n.saver.save(n.sess, "./" + n.save_file)
+                n.saver.save(n.sess, "./" + save_file)
             else:
-                n.saver.save(n.sess, "./" + n.save_file, write_meta_graph = False)
+                n.saver.save(n.sess, "./" + save_file, write_meta_graph = False)
 
     def restore_network(n):
         # RESTORES NETWORK FROM TENSORFLOW SAVER METAFILE
@@ -383,6 +402,8 @@ class IMNN():
         # η                             float     - learning rate
         # network              optional func      - externally provided function for building network
         # inputs                      n int/list  - number of inputs (int) or shape of input (list)
+        # n_batch                     n int       - number of simulations per combination
+        # n_p_batch                   n int       - number of derivative simulations per combination
         # n_params                    n int       - number of parameters in the model
         # prebuild                    n bool      - True to allow IMNN to build the network
         #______________________________________________________________
@@ -399,25 +420,70 @@ class IMNN():
         # F                           n tensor    - Fisher information matrix
         #______________________________________________________________
         n.x = tf.placeholder(n._FLOATX, shape = [None] + n.inputs, name = "x")
-        n.x_m = tf.placeholder(n._FLOATX, shape = [None] + n.inputs, name = "x_m")
-        n.x_m = tf.stop_gradient(n.x_m)
-        n.x_p = tf.placeholder(n._FLOATX, shape = [None] + n.inputs, name = "x_p")
-        n.x_p = tf.stop_gradient(n.x_p)
+        if n.preload_data is not None:
+            n.x = tf.stop_gradient(n.x)
+            n.central_indices = tf.placeholder(tf.int32, shape = [n.n_batch], name = "central_indices")
+            n.derivative_indices = tf.placeholder(tf.int32, shape = [n.n_p_batch], name = "derivative_indices")
+            n.x_central = tf.constant(n.preload_data["x_central"], dtype = n._FLOATX)
+            training_input = []
+            for i in range(n.n_batch):
+                training_input.append(n.x_central[n.central_indices[i]])
+            training_input = tf.stack(training_input)
+            n.x_m = tf.constant(n.preload_data["x_m"], dtype = n._FLOATX)
+            n.x_m = tf.stop_gradient(n.x_m)
+            n.x_p = tf.constant(n.preload_data["x_p"], dtype = n._FLOATX)
+            n.x_p = tf.stop_gradient(n.x_p)
+            derivative_input_m = []
+            derivative_input_p = []
+            for i in range(n.n_p_batch):
+                derivative_input_m.append(n.x_m[n.derivative_indices[i]])
+                derivative_input_p.append(n.x_p[n.derivative_indices[i]])
+            derivative_input_m = tf.stack(derivative_input_m)
+            derivative_input_p = tf.stack(derivative_input_p)
+            derivative_input_m = tf.reshape(derivative_input_m, [n.n_p_batch * n.n_params] + n.x_m.get_shape().as_list()[2:])
+            derivative_input_p = tf.reshape(derivative_input_p, [n.n_p_batch * n.n_params] + n.x_p.get_shape().as_list()[2:])
+            if set(["x_central_test", "x_m_test", "x_p_test"]).issubset(n.preload_data.keys()):
+                test_input = tf.constant(n.preload_data["x_central_test"], dtype = n._FLOATX)
+                test_derivative_input_m = tf.constant(n.preload_data["x_m_test"], dtype = n._FLOATX)
+                test_derivative_input_m = tf.reshape(test_derivative_input_m, [np.prod(test_derivative_input_m.get_shape().as_list()[:2])] + test_derivative_input_m.get_shape().as_list()[2:])
+                test_derivative_input_p = tf.constant(n.preload_data["x_p_test"], dtype = n._FLOATX)
+                test_derivative_input_p = tf.reshape(test_derivative_input_p, [np.prod(test_derivative_input_p.get_shape().as_list()[:2])] + test_derivative_input_p.get_shape().as_list()[2:])
+            else:
+                test_input = None
+        else:
+            n.x_m = tf.placeholder(n._FLOATX, shape = [None] + n.inputs, name = "x_m")
+            n.x_m = tf.stop_gradient(n.x_m)
+            derivative_input_m = tf.identity(n.x_m)
+            n.x_p = tf.placeholder(n._FLOATX, shape = [None] + n.inputs, name = "x_p")
+            n.x_p = tf.stop_gradient(n.x_p)
+            derivative_input_p = tf.identity(n.x_p)
         n.dd = tf.placeholder(n._FLOATX, shape = (n.n_params), name = "dd")
         n.dropout = tf.placeholder(n._FLOATX, shape = (), name = "dropout")
         if n.prebuild:
             network = n.build_network
         utils.utils().to_prebuild(network)
         with tf.variable_scope("IMNN") as scope:
-            output = network(n.x, n.dropout)
-        n.output = tf.identity(output, name = "output")
+            output_central = network(n.x, n.dropout)
+        n.output = tf.identity(output_central, name = "output")
         print(n.output)
         with tf.variable_scope("IMNN") as scope:
+            if n.preload_data is not None:
+                scope.reuse_variables()
+                output_central = network(training_input, n.dropout)
+                if test_input is not None:
+                    scope.reuse_variables()
+                    test_output_central = network(test_input, 1.)
+                    scope.reuse_variables()
+                    test_output_m = network(test_derivative_input_m, 1.)
+                    scope.reuse_variables()
+                    test_output_p = network(test_derivative_input_p, 1.)
             scope.reuse_variables()
-            output_m = network(n.x_m, n.dropout)
+            output_m = network(derivative_input_m, n.dropout)
             scope.reuse_variables()
-            output_p = network(n.x_p, n.dropout)
-        n.F = n.Fisher(n.output, output_m, output_p, n.dd)
+            output_p = network(derivative_input_p, n.dropout)
+        n.F = n.Fisher(output_central, output_m, output_p, n.dd)
+        if n.preload_data is not None and test_input is not None:
+            n.test_F = n.Fisher(test_output_central, test_output_m, test_output_p, n.dd)
         n.training_scheme(η)
         n.begin_session()
 
@@ -590,6 +656,86 @@ class IMNN():
         if n.save_file is not None:
             n.save_network()
         if do_test:
+            return train_F, test_F
+        else:
+            return train_F
+
+    def train_with_preloaded(n, num_epochs, keep_rate, der_den):
+        # TRAIN INFORMATION MAXIMISING NEURAL NETWORK
+        #______________________________________________________________
+        # RETURNS
+        # list or list, list
+        # determinant of Fisher information matrix at the end of each epoch for train data (and test data)
+        #______________________________________________________________
+        # FUNCTIONS (DEFINED IN IMNN.py)
+        # shuffle(array, array, array)  array     - shuffles the simulations on each epoch
+        # get_combination_data(list, int, int)
+        #                               array, array, array
+        #                                         - gets individual combination of data
+        # save_network(optional Bool)             - saves the network (if n.save_file is not None)
+        #______________________________________________________________
+        # FUNCTIONS (DEFINED IN utils.py)
+        # check_data(class, list, int, optional bool)
+        #                               bool      - checks whether data is of correct format (and whether to use test data)
+        # positive_integer(list)        int       - checks that parameter is a positive integer
+        # enough(int, int, optional bool, optional bool)
+        #                                         - checks number of batches is less than n_train and makes use of all data
+        # constrained_float(float, string)
+        #                               float     - checks the dropout is between 0 and 1
+        #______________________________________________________________
+        # INPUTS
+        # train_data                    list      - data at fiducial, lower and upper parameter values
+        # num_epochs                    int       - number of epochs to train
+        # n_train                       int       - number of combinations to split training set into
+        # num_batches                   int       - number of batches to process at once
+        # keep_rate                     float     - keep rate for dropout
+        # der_den                       array     - inverse difference between upper and lower parameter values
+        # test_data            optional list      - data at fiducial, lower and upper parameter values for testing
+        # sess                        n session   - interactive tensorflow session (with initialised parameters)
+        # backpropagate               n tf opt    - minimisation scheme for the network
+        # x                           n tensor    - fiducial simulation input tensor
+        # x_m                         n tensor    - below fiducial simulation input tensor
+        # x_p                         n tensor    - above fiducial simulation input tensor
+        # dropout                     n tensor    - keep rate for dropout layer
+        # dd                          n tensor    - inverse difference between upper and lower parameter value
+        # F                           n tensor    - Fisher information matrix
+        #______________________________________________________________
+        # VARIABLES
+        # do_test                       bool      - True if using test_data
+        # train_F                       list      - determinant Fisher information matrix at end of train epoch
+        # test_F                        list      - determinant Fisher information matrix of test data at end of epoch
+        # epoch                         int       - epoch counter
+        # td                            list      - shuffled data at fiducial, lower and upper parameter values
+        # t                             array     - reshaped single combination of data at fiducial parameter value
+        # t_m                           array     - more reshaped single combination of data below fiducial parameter value
+        # t_p                           array     - more reshaped single combination of data above fiducial parameter value
+        #______________________________________________________________
+        num_epochs = utils.utils().positive_integer(num_epochs, key = 'number of epochs')
+        keep_rate = utils.utils().constrained_float(keep_rate, key = 'dropout')
+
+        train_F = []
+        central_indices = np.arange(n.n_s)
+        derivative_indices = np.arange(n.n_p)
+        if n.test_F is not None:
+            test = True
+            test_F = []
+        else:
+            test = False
+        tq = tqdm.trange(num_epochs)
+        for epoch in tq:
+            np.random.shuffle(central_indices)
+            np.random.shuffle(derivative_indices)
+            for combination in range(n.n_train):
+                n.sess.run(n.backpropagate, feed_dict = {n.central_indices: central_indices[combination * n.n_batch: (combination + 1) * n.n_batch], n.derivative_indices: derivative_indices[combination * n.n_p_batch: (combination + 1) * n.n_p_batch], n.dropout: keep_rate, n.dd: der_den})
+            train_F.append(np.linalg.det(n.sess.run(n.F, feed_dict = {n.central_indices: central_indices[combination * n.n_batch: (combination + 1) * n.n_batch], n.derivative_indices: derivative_indices[combination * n.n_p_batch: (combination + 1) * n.n_p_batch], n.dropout: 1., n.dd: der_den})))
+            if test:
+                 test_F.append(np.linalg.det(n.sess.run(n.test_F, feed_dict = {n.dd: der_den})))
+                 tq.set_postfix(detF = train_F[-1], detF_test = test_F[-1])
+            else:
+                 tq.set_postfix(detF = train_F[-1])
+        if n.save_file is not None:
+            n.save_network()
+        if test:
             return train_F, test_F
         else:
             return train_F
