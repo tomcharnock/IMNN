@@ -70,15 +70,16 @@ class IMNN():
         n._FLOATX = tf.float32
         u.check_params(parameters)
         n.verbose = u.isboolean([parameters, 'verbose'])
-        n.n_s = u.positive_integer([parameters, 'number of simulations'])
-        n.n_batch = u.positive_divisible(parameters, 'number of combinations', n.n_s, 'number of simulations')
-        n.n_params = u.positive_integer([parameters, 'number of parameters'])
-        n.n_p = u.number_of_derivative_simulations(parameters, n)
-        n.n_p_batch = u.positive_divisible(parameters, 'number of combinations', n.n_p, 'number of derivative simulations')
-        n.n_train = parameters['number of combinations']
-        n.n_summaries = u.positive_integer([parameters, 'number of summaries'])
         n.inputs = u.inputs(parameters)
         n.preload_data = u.check_preloaded(parameters, n)
+        n.n_s = u.positive_integer([parameters, 'number of simulations'])
+        n.n_params = u.positive_integer([parameters, 'number of parameters'])
+        n.n_p = u.number_of_derivative_simulations(parameters, n)
+        if n.preload_data is not None:
+            n.n_batch = u.positive_divisible(parameters, 'number of combinations', n.n_s, 'number of simulations')
+            n.n_p_batch = u.positive_divisible(parameters, 'number of combinations', n.n_p, 'number of derivative simulations')
+            n.n_train = parameters['number of combinations']
+        n.n_summaries = u.positive_integer([parameters, 'number of summaries'])
         n.prebuild = u.isboolean([parameters, 'prebuild'])
         n.save_file = u.check_save_file([parameters, 'save file'])
         if n.prebuild:
