@@ -39,7 +39,7 @@ class IMNN():
         # n_p_batch                   n int       - number of derivative simulations per combination
         # n_train                     n int       - number of combinations to split simulations into
         # n_summaries                 n int       - number of outputs from the network
-        # inputs                      n int/list  - number of inputs (int) or shape of input (list)
+        # inputs                      n list      - shape of input (list)
         # preload_data                n dict/None - training data to be preloaded to GPU
         # η                           n float     - learning rate
         # prebuild                    n bool      - True to allow IMNN to build the network
@@ -210,7 +210,7 @@ class IMNN():
         # biases                        tensor    - bias kernel
         # dense                         tensor    - dense layer (not activated)
         #______________________________________________________________
-        previous_layer = int(input_tensor.get_shape()[-1])
+        previous_layer = int(input_tensor.get_shape().as_list()[-1])
         weight_shape = (previous_layer, n.layers[l])
         bias_shape = (n.layers[l])
         if n.allow_init:
@@ -253,7 +253,7 @@ class IMNN():
         # biases                        tensor    - bias kernel
         # conv                          tensor    - convolutional feature map (not activated)
         #______________________________________________________________
-        previous_filters = int(input_tensor.get_shape()[-1])
+        previous_filters = int(input_tensor.get_shape().as_list()[-1])
         if len(n.layers[l][1]) == 2:
             convolution = tf.nn.conv2d
             weight_shape = (n.layers[l][1][0], n.layers[l][1][1], previous_filters, n.layers[l][0])
@@ -304,11 +304,13 @@ class IMNN():
             else:
                 drop_val = 1.
             if type(n.layers[l]) == list:
+                if len(layer[-1].get_shape().as_list()) < 2:
+                    layer.append(tf.reshape(layer[-1], (-1, layer[-1].get_shape().as_list()[-1], 1)))
                 with tf.variable_scope('layer_' + str(l)):
                     layer.append(n.conv(layer[-1], l, drop_val))
             else:
                 if len(layer[-1].get_shape()) > 2:
-                    layer.append(tf.reshape(layer[-1], (-1, np.prod(layer[-1].get_shape()[1:]))))
+                    layer.append(tf.reshape(layer[-1], (-1, np.prod(layer[-1].get_shape().as_list()[1:]))))
                 with tf.variable_scope('layer_' + str(l)):
                     layer.append(n.dense(layer[-1], l, drop_val))
             if n.verbose: print(layer[-1])
@@ -422,7 +424,6 @@ class IMNN():
         #______________________________________________________________
         n.x = tf.placeholder(n._FLOATX, shape = [None] + n.inputs, name = "x")
         if n.preload_data is not None:
-            n.x = tf.stop_gradient(n.x)
             n.central_indices = tf.placeholder(tf.int32, shape = [n.n_batch], name = "central_indices")
             n.derivative_indices = tf.placeholder(tf.int32, shape = [n.n_p_batch], name = "derivative_indices")
             n.x_central = tf.constant(n.preload_data["x_central"], dtype = n._FLOATX)
@@ -458,6 +459,7 @@ class IMNN():
             n.x_p = tf.placeholder(n._FLOATX, shape = [None] + n.inputs, name = "x_p")
             n.x_p = tf.stop_gradient(n.x_p)
             derivative_input_p = tf.identity(n.x_p)
+
         n.dd = tf.placeholder(n._FLOATX, shape = (n.n_params), name = "dd")
         n.dropout = tf.placeholder(n._FLOATX, shape = (), name = "dropout")
         if n.prebuild:

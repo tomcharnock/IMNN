@@ -236,11 +236,36 @@ class utils():
             sys.exit()
         return value
 
+    def islist(u, value, optional = "", key = ""):
+        # CHECKS FOR LIST
+        #______________________________________________________________
+        # CALLED FROM (DEFINED IN utils.py)
+        # inputs(dict)                 list       - returns the input shape
+        #______________________________________________________________
+        # RETURNS
+        # list
+        # returns list if input is a list
+        #______________________________________________________________
+        # INPUTS
+        # value                        list/other - list with parameter and key to unpack or
+        #                                           a value to pass forward
+        # optional            optional str        - normally a string to use to output error warning
+        # key                 optional str        - string to use to indicate key of value
+        #______________________________________________________________
+        # FUNCTIONS
+        # get_params(list/other, str/other)
+        #                             other       - unpacks dictionary or passes value forward
+        #______________________________________________________________
+        value, key = u.get_params(value, key)
+        if type(value) != list:
+            print(key + ' must be a list. provided type is a ' + str(type(value)) + '. ' + optional)
+            sys.exit()
+        return value
+
     def isint_or_list(u, value, optional = '', key = ''):
         # CHECKS FOR INTEGER OR LIST
         #______________________________________________________________
         # CALLED FROM (DEFINED IN utils.py)
-        # inputs(dict)                 int/list   - returns the input shape as list or size as int
         # hidden_layers(dict, class)   list       - returns the network architecture as a list
         #______________________________________________________________
         # RETURNS
@@ -317,12 +342,12 @@ class utils():
         # i                            int        - counter for each dimension of input shape
         #______________________________________________________________
         key = 'input shape'
-        value = u.isint_or_list([params, key], optional = 'if using a list the entries must be 3 or 4 positive integers.')
-        if type(value) == int:
-            value = [u.positive_integer([params, key])]
+        value = u.islist([params, key], optional = 'the list must contain 1, 3 or 4 positive integers.')
+        if len(value) == 1:
+            value[0] = u.positive_integer(value[0], key = key)
         else:
             if len(value) < 3 or len(value) > 4:
-                print(key + ' must be a list of 3 or 4 positive integers. the length of the list is ' + str(len(value)) + '.')
+                print(key + ' must be a list of 1, 3 or 4 positive integers. the length of the list is ' + str(len(value)) + '.')
                 sys.exit()
             for i in range(len(value)):
                 value[i] = u.positive_integer(value[i], optional = 'the problem is at element ' + str(i) + '.', key = key)
