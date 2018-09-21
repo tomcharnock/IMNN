@@ -529,7 +529,7 @@ class utils():
         # list
         # returns a list of None for each unset shared network parameter
         #______________________________________________________________
-        return [None for i in range(11)]
+        return [None for i in range(16)]
 
     def to_prebuild(u, network):
         # INITIALISES ALL SHARED NETWORK PARAMETERS TO NONE
@@ -610,14 +610,16 @@ class utils():
             return False
         else:
             if type(samples) == list:
-                if len(samples) == 6:
+                if len(samples) == 7:
                     if type(samples[0]) == np.ndarray:
                         if type(samples[1]) == np.ndarray:
                             if type(samples[2]) == np.ndarray:
                                 if type(samples[3]) == np.ndarray:
                                     if type(samples[4]) == np.ndarray:
                                         u.positive_integer(samples[5], key = 'element 5 of samples', optional = 'this should be the total number of draws so far.')
-                                        return True
+                                        if type(samples[6]) == np.ndarray:
+                                            return True
+                                        print('element 6 of samples should be an array of the Fisher information matrix. current type is ' + str(type(samples[6])) + '.')
                                     print('element 4 of samples should be an array of the sample weights. current type is ' + str(type(samples[4])) + '.')
                                     sys.exit()
                                 print('element 3 of samples should be an array of the summaries of the current simulations. current type is ' + str(type(samples[3])) + '.')
