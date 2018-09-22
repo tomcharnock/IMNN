@@ -529,7 +529,7 @@ class utils():
         # list
         # returns a list of None for each unset shared network parameter
         #______________________________________________________________
-        return [None for i in range(16)]
+        return [None for i in range(18)]
 
     def to_prebuild(u, network):
         # INITIALISES ALL SHARED NETWORK PARAMETERS TO NONE
