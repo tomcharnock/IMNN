@@ -49,9 +49,9 @@ class IMNN():
         # layers                      n list      - contains the neural architecture of the network
         # sess        begin_session() n session   - interactive tensorflow session (with initialised parameters)
         # x                   setup() n tensor    - fiducial simulation input tensor
-        # x_real              setup() n tensor    - extra feedforward input tensor for calculating MLE
         # θ_fid               setup() n tensor    - fiducial parameter input tensor for calculation MLE
         # prior                       n tensor    - prior range for each parameter for calculating MLE
+        # x_central           setup() n tensor    - input tensor for fiducial simulations
         # x_m                 setup() n tensor    - below fiducial simulation input tensor
         # x_p                 setup() n tensor    - above fiducial simulation input tensor
         # dd                  setup() n tensor    - inverse difference between upper and lower parameter value
@@ -59,6 +59,7 @@ class IMNN():
         # output              setup() n tensor    - network output for simulations at fiducial parameter value
         # F                   setup() n tensor    - Fisher information matrix
         # MLE                 setup() n tensor    - MLE of parameters
+        # AL                  setup() n tensor    - asymptotic likelihood at range of parameter values
         # backpropagate       setup() n tf opt    - minimisation scheme for the network
         # μ                  Fisher() n tensor    - mean of network outputs for fiducial simulations
         # C                  Fisher() n tensor    - covariance of network outputs for fiducial simulations
@@ -84,7 +85,7 @@ class IMNN():
             n.bb = u.isfloat([parameters, 'bb'])
             n.activation, n.takes_α, n.α = u.activation(parameters)
             n.layers = u.hidden_layers(parameters, n)
-        n.sess, n.x, n.x_real, n.θ_fid, n.prior, n.x_m, n.x_p, n.dd, n.dropout, n.output, n.F, n.backpropagate, n.μ, n.C, n.iC, n.dμdθ, n.MLE, n.AL = u.initialise_variables()
+        n.sess, n.x, n.x_central, n.θ_fid, n.prior, n.x_m, n.x_p, n.dd, n.dropout, n.output, n.F, n.backpropagate, n.μ, n.C, n.iC, n.dμdθ, n.MLE, n.AL = u.initialise_variables()
 
     def begin_session(n):
         # BEGIN TENSORFLOW SESSION AND INITIALISE PARAMETERS
@@ -142,6 +143,7 @@ class IMNN():
         # save_file                   n string    - name of the file to reload (ending in .meta)
         # loader                        tf op     - loading operation from tensorflow
         # x                           n tensor    - fiducial simulation input tensor
+        # x_central                   n tensor    - fixed-sized fiducial simulation input tensor
         # x_m                         n tensor    - below fiducial simulation input tensor
         # x_p                         n tensor    - above fiducial simulation input tensor
         # dd                          n tensor    - inverse difference between upper and lower parameter value
@@ -151,6 +153,9 @@ class IMNN():
         # backpropagate               n tf opt    - minimisation scheme for the network
         # C                           n tensor    - covariance of network outputs for fiducial simulations
         # dμdθ                        n tensor    - numerical derivative of the mean of network outputs
+        # MLE                 setup() n tensor    - MLE of parameters
+        # AL                  setup() n tensor    - asymptotic likelihood at range of parameter values
+        #______________________________________________________________
         if n.save_file is not None:
             config = tf.ConfigProto()
             config.gpu_options.allow_growth = True
@@ -158,14 +163,20 @@ class IMNN():
             loader = tf.train.import_meta_graph("./" + n.save_file + ".meta")
             loader.restore(n.sess, n.save_file)
             n.x = tf.get_default_graph().get_tensor_by_name("x:0")
+            n.x_central = tf.get_default_graph().get_tensor_by_name("x_central:0")
             n.x_m = tf.get_default_graph().get_tensor_by_name("x_m:0")
             n.x_p = tf.get_default_graph().get_tensor_by_name("x_p:0")
+            n.θ_fid = tf.get_default_graph().get_tensor_by_name("fiducial:0")
+            n.prior = tf.get_default_graph().get_tensor_by_name("prior:0")
             n.dd = tf.get_default_graph().get_tensor_by_name("dd:0")
             n.dropout = tf.get_default_graph().get_tensor_by_name("dropout:0")
             n.output = tf.get_default_graph().get_tensor_by_name("output:0")
             n.F = tf.get_default_graph().get_tensor_by_name("fisher_information:0")
             n.C = tf.get_default_graph().get_tensor_by_name("central_covariance:0")
             n.dμdθ = tf.get_default_graph().get_tensor_by_name("mean_derivative:0")
+            if n.get_MLE:
+                n.MLE = tf.get_default_graph().get_tensor_by_name("maximum_likelihood_estimate:0")
+                n.AL = tf.get_default_graph().get_tensor_by_name("asymptotic_likelihood:0")
             n.backpropagate = tf.get_default_graph().get_operation_by_name("Adam")
 
     def dense(n, input_tensor, l, dropout):
@@ -350,7 +361,7 @@ class IMNN():
         if n.verbose: print(n.dμdθ)
         return tf.einsum('ijk,ilk->ijl', n.dμdθ, tf.einsum('ijk,ilk->ilj', n.iC, n.dμdθ))
 
-    def asymptotic_likelihood(n, output_real):
+    def asymptotic_likelihood(n):
         # CALCULATE THE ASYMPTOTIC LIKELIHOOD
         #______________________________________________________________
         # CALLED FROM (DEFINED IN IMNN.py)
@@ -361,7 +372,7 @@ class IMNN():
         # Asymptotic likelihood at a range of parameter values
         #______________________________________________________________
         # INPUTS
-        # output_real                   tensor    - IMNN summary of real data
+        # output                      n tensor    - IMNN summary of real data
         # θ_fid                       n tensor    - fiducial parameter input tensor for calculating MLE
         # prior                       n tensor    - prior range for each parameter for calculating MLE
         # μ                           n tensor    - mean of network outputs for fiducial simulations
@@ -373,10 +384,10 @@ class IMNN():
         # approximate_likelihood        tensor    - approximate likelihood over prior range
         #______________________________________________________________
         Δθ = n.prior - tf.expand_dims(n.θ_fid, 2)
-        approximate_likelihood = tf.exp(- 0.5 * (tf.expand_dims(tf.expand_dims(tf.einsum("ij,ij->i", output_real, tf.einsum("ijk,ik->ij", n.iC, output_real)), 1) + tf.einsum("ijk,ik->ij", n.μ, tf.einsum("ijk,ik->ij", n.iC, output_real)) + tf.einsum("ij,ikj->ik", output_real, tf.einsum("ijk,ilk->ilj", n.iC, n.μ)) + tf.einsum("ijk,ijk->ij", n.μ, tf.einsum("ijk,ilk->ilj", n.iC, n.μ)), 2) - tf.einsum("ijk,ij->ijk", Δθ, tf.einsum("ijk,ik->ij", n.dμdθ, tf.einsum("ijk,ik->ij", n.iC, output_real))) - tf.einsum("ijk,ij->ijk", Δθ, tf.einsum("ij,ikj->ik", output_real, tf.einsum("ijk,ilk->ilj", n.iC, n.dμdθ))) + tf.einsum("ijk,ij->ijk", Δθ, tf.einsum("ijk,ijk->ij", n.dμdθ, tf.einsum("ijk,ilk->ilj", n.iC, n.μ))) + tf.einsum("ijk,ij->ijk", Δθ, tf.einsum("ijk,ijk->ij", n.μ, tf.einsum("ijk,ilk->ilj", n.iC, n.dμdθ))) + tf.einsum("ijk,ijk->ijk", Δθ, tf.einsum("ijk,ij->ijk", Δθ, tf.einsum("ijk,ijk->ij", n.dμdθ, tf.einsum("ijk,ilk->ilj", n.iC, n.dμdθ))))))
+        approximate_likelihood = tf.exp(- 0.5 * (tf.expand_dims(tf.expand_dims(tf.einsum("ij,ij->i", n.output, tf.einsum("ijk,ik->ij", n.iC, n.output)), 1) + tf.einsum("ijk,ik->ij", n.μ, tf.einsum("ijk,ik->ij", n.iC, n.output)) + tf.einsum("ij,ikj->ik", n.output, tf.einsum("ijk,ilk->ilj", n.iC, n.μ)) + tf.einsum("ijk,ijk->ij", n.μ, tf.einsum("ijk,ilk->ilj", n.iC, n.μ)), 2) - tf.einsum("ijk,ij->ijk", Δθ, tf.einsum("ijk,ik->ij", n.dμdθ, tf.einsum("ijk,ik->ij", n.iC, n.output))) - tf.einsum("ijk,ij->ijk", Δθ, tf.einsum("ij,ikj->ik", n.output, tf.einsum("ijk,ilk->ilj", n.iC, n.dμdθ))) + tf.einsum("ijk,ij->ijk", Δθ, tf.einsum("ijk,ijk->ij", n.dμdθ, tf.einsum("ijk,ilk->ilj", n.iC, n.μ))) + tf.einsum("ijk,ij->ijk", Δθ, tf.einsum("ijk,ijk->ij", n.μ, tf.einsum("ijk,ilk->ilj", n.iC, n.dμdθ))) + tf.einsum("ijk,ijk->ijk", Δθ, tf.einsum("ijk,ij->ijk", Δθ, tf.einsum("ijk,ijk->ij", n.dμdθ, tf.einsum("ijk,ilk->ilj", n.iC, n.dμdθ))))))
         return approximate_likelihood / tf.reduce_sum(approximate_likelihood * (n.prior[:, :, 1] - n.prior[:, :, 0]), 2)
 
-    def maximumlikelihoodestimate(n, output_real):
+    def maximumlikelihoodestimate(n):
         # CALCULATE THE MAXIMUM LIKELIHOOD ESTIMATE
         #______________________________________________________________
         # CALLED FROM (DEFINED IN IMNN.py)
@@ -387,7 +398,8 @@ class IMNN():
         # Maximum likelihood estimate
         #______________________________________________________________
         # INPUTS
-        # output_real                   tensor    - IMNN summary of real data
+        # F                           n tensor    - Fisher information matrix from simulations
+        # output                      n tensor    - network summary of real data
         # θ_fid                       n tensor    - fiducial parameter input tensor for calculating MLE
         # μ                           n tensor    - mean of network outputs for fiducial simulations
         # Ci                          n tensor    - inverse covariance of network outputs for fiducial simulations
@@ -397,7 +409,7 @@ class IMNN():
         # iF                            tensor    - inverse Fisher information matrix from fiducial simulations
         #______________________________________________________________
         iF = tf.matrix_inverse(n.F)
-        return tf.expand_dims(n.θ_fid, 2) + tf.einsum("ijk,ikl->ijl", iF, tf.einsum("ijk,ilk->ilj", n.iC, tf.einsum("ijk,ijk->ijk", n.dμdθ, tf.expand_dims(output_real, 1) - n.μ)))
+        return tf.expand_dims(n.θ_fid, 2) + tf.einsum("ijk,ikl->ijl", iF, tf.einsum("ijk,ilk->ilj", n.iC, tf.einsum("ijk,ijk->ijk", n.dμdθ, tf.expand_dims(n.output, 1) - n.μ)))
 
     def loss(n, F):
         # CALCULATE THE LOSS FUNCTION
@@ -465,13 +477,16 @@ class IMNN():
         #______________________________________________________________
         n.x = tf.placeholder(n._FLOATX, shape = [None] + n.inputs, name = "x")
         if n.get_MLE:
-            n.x_real = tf.placeholder(n._FLOATX, shape = [None] + n.inputs, name = "x_real")
             n.θ_fid = tf.placeholder(dtype = n._FLOATX, shape = [None, n.n_params], name = "fiducial")
             n.prior = tf.placeholder(dtype = n._FLOATX, shape = [None, n.n_params, 1000], name = "prior")
-        n.x_m = tf.placeholder(n._FLOATX, shape = [None] + n.inputs, name = "x_m")
+        n.x_central = tf.placeholder(n._FLOATX, shape = [n.n_s] + n.inputs, name = "x_central")
+        central_input = tf.identity(n.x_central)
+        n.x_m = tf.placeholder(n._FLOATX, shape = [n.n_p, n.n_params] + n.inputs, name = "x_m")
         n.x_m = tf.stop_gradient(n.x_m)
-        n.x_p = tf.placeholder(n._FLOATX, shape = [None] + n.inputs, name = "x_p")
+        derivative_input_m = tf.reshape(n.x_m, [n.n_p * n.n_params] + n.inputs)
+        n.x_p = tf.placeholder(n._FLOATX, shape = [n.n_p, n.n_params] + n.inputs, name = "x_p")
         n.x_p = tf.stop_gradient(n.x_p)
+        derivative_input_p = tf.reshape(n.x_p, [n.n_p * n.n_params] + n.inputs)
         n.dd = tf.placeholder(n._FLOATX, shape = (n.n_params), name = "dd")
         n.dropout = tf.placeholder(n._FLOATX, shape = (), name = "dropout")
         if n.prebuild:
@@ -483,18 +498,17 @@ class IMNN():
         if n.verbose: print(n.output)
         with tf.variable_scope("IMNN") as scope:
             scope.reuse_variables()
-            output_m = network(n.x_m, n.dropout)
+            output_central = network(central_input, n.dropout)
             scope.reuse_variables()
-            output_p = network(n.x_p, n.dropout)
-            if n.get_MLE:
-                scope.reuse_variables()
-                output_real = tf.identity(network(n.x_real, 1.), name = "output_real")
-        n.F = tf.identity(n.Fisher(n.output, output_m, output_p, n.dd), name = 'fisher_information')
+            output_m = network(derivative_input_m, n.dropout)
+            scope.reuse_variables()
+            output_p = network(derivative_input_p, n.dropout)
+        n.F = tf.identity(n.Fisher(output_central, output_m, output_p, n.dd), name = 'fisher_information')
         if n.verbose: print(n.F)
         if n.get_MLE:
-            n.MLE = tf.identity(n.maximumlikelihoodestimate(output_real), name = "maximum_likelihood_estimate")
+            n.MLE = tf.identity(n.maximumlikelihoodestimate(), name = "maximum_likelihood_estimate")
             if n.verbose: print(n.MLE)
-            n.AL = tf.identity(n.asymptotic_likelihood(output_real), name = "asymptotic_likelihood")
+            n.AL = tf.identity(n.asymptotic_likelihood(), name = "asymptotic_likelihood")
             if n.verbose: print(n.AL)
         n.training_scheme(η)
         n.begin_session()
@@ -517,10 +531,9 @@ class IMNN():
         # backpropagate               n tf opt    - minimisation scheme for the network
         #______________________________________________________________
         η = utils.utils().isfloat(η, key = 'η')
-        #n.backpropagate = tf.train.AdamOptimizer(η).minimize(n.loss(n.F))
         n.backpropagate = tf.train.GradientDescentOptimizer(η).minimize(n.loss(n.F))
 
-    def shuffle(n, data, data_m, data_p, n_train):
+    def shuffle(n, data):
         # SHUFFLES DATA
         #______________________________________________________________
         # CALLED FROM (DEFINED IN IMNN.py)
@@ -528,71 +541,23 @@ class IMNN():
         #                                         - trains the network
         #______________________________________________________________
         # RETURNS
-        # array, array, array
+        # list
         #______________________________________________________________
         # INPUTS
-        # data                          array     - data at fiducial parameter value
-        # data_m                        array     - data below fiducial parameter value
-        # data_p                        array     - data above fiducial parameter value
-        # n_train                       int       - number of combinations to split training set into
-# NEED TO CHECK MULTIPLE PARAMS # n_params                    n int       - number of parameters in the model
-        # n_s                         n int       - number of simulations in each combination
-        # n_p                         n int       - number of differentiation simulations in each combination
+        # data                          list      - list containing data to be shuffled
         #______________________________________________________________
         # VARIABLE
-        # full_shuffle                  array     - indices of simulations
-        # d                             array     - shuffled data
-        # partial_shuffle               array     - indices of derivative simulations
-        # d_m                           array     - shuffled lower fiducial parameter data
-        # d_p                           array     - shuffled upper fiducial parameter data
+        # seed                          int       - seed for shuffling derivatives correctly
         #______________________________________________________________
-        full_shuffle = np.arange(n.n_s * n_train)
-        np.random.shuffle(full_shuffle)
-        full_shuffle = full_shuffle.reshape(n_train, n.n_s)
-        d = np.array([data[full_shuffle[i]] for i in range(n_train)])
-        partial_shuffle = np.arange(n.n_p * n_train)
-        np.random.shuffle(partial_shuffle)
-        partial_shuffle = partial_shuffle.reshape(n_train, n.n_p)
-        d_m = np.array([data_m[partial_shuffle[i]] for i in range(n_train)])
-        d_p = np.array([data_p[partial_shuffle[i]] for i in range(n_train)])
-        return d, d_m, d_p
+        np.random.shuffle(data[0])
+        seed = np.random.randint(1e6)
+        np.random.seed(seed)
+        np.random.shuffle(data[1])
+        np.random.seed(seed)
+        np.random.shuffle(data[2])
+        return data
 
-    def get_combination_data(n, data, combination, n_batches):
-        # GETS SINGLE COMBINATION OF DATA
-        #______________________________________________________________
-        # CALLED FROM (DEFINED IN IMNN.py)
-        # train(list, int, int, float, array, optional list)
-        #                                         - trains the network
-        #______________________________________________________________
-        # RETURNS
-        # array, array, array
-        #______________________________________________________________
-        # INPUTS
-        # data                          list      - data at fiducial, lower and upper parameter values
-        # combinations                  int       - combination counter
-        # n_batches                     int       - number of batches to process at once
-        #______________________________________________________________
-        # VARIABLE
-        # td_                           array     - single combination of data at fiducial parameter value
-        # t                             array     - reshaped single combination of data at fiducial parameter value
-        # t_m__                         array     - single combination of data below fiducial parameter value
-        # t_m_                          array     - reshaped single combination of data below fiducial parameter value
-        # t_m                           array     - more reshaped single combination of data below fiducial parameter value
-        # t_p__                         array     - single combination of data above fiducial parameter value
-        # t_p_                          array     - reshaped single combination of data above fiducial parameter value
-        # t_p                           array     - more reshaped single combination of data above fiducial parameter value
-        #______________________________________________________________
-        td_ = data[0][combination * n_batches: (combination + 1) * n_batches]
-        t = td_.reshape([np.prod(td_.shape[: 2])] + list(td_.shape[2:]))
-        t_m__ = data[1][combination * n_batches: (combination + 1) * n_batches]
-        t_m_ = t_m__.reshape([np.prod(t_m__.shape[:2])] + list(t_m__.shape[2:]))
-        t_m = t_m_.reshape([np.prod(t_m_.shape[:2])] + list(t_m_.shape[2:]))
-        t_p__ = data[2][combination * n_batches: (combination + 1) * n_batches]
-        t_p_ = t_p__.reshape([np.prod(t_p__.shape[:2])] + list(t_p__.shape[2:]))
-        t_p = t_p_.reshape([np.prod(t_p_.shape[:2])] + list(t_p_.shape[2:]))
-        return t, t_m, t_p
-
-    def train(n, train_data, num_epochs, n_train, num_batches, keep_rate, der_den, test_data = None):
+    def train(n, train_data, num_epochs, n_train, keep_rate, der_den, test_data = None):
         # TRAIN INFORMATION MAXIMISING NEURAL NETWORK
         #______________________________________________________________
         # RETURNS
@@ -600,18 +565,13 @@ class IMNN():
         # determinant of Fisher information matrix at the end of each epoch for train data (and test data)
         #______________________________________________________________
         # FUNCTIONS (DEFINED IN IMNN.py)
-        # shuffle(array, array, array)  array     - shuffles the simulations on each epoch
-        # get_combination_data(list, int, int)
-        #                               array, array, array
-        #                                         - gets individual combination of data
+        # shuffle(list)                 list      - shuffles the simulations on each epoch
         # save_network(optional Bool)             - saves the network (if n.save_file is not None)
         #______________________________________________________________
         # FUNCTIONS (DEFINED IN utils.py)
         # check_data(class, list, int, optional bool)
         #                               bool      - checks whether data is of correct format (and whether to use test data)
         # positive_integer(list)        int       - checks that parameter is a positive integer
-        # enough(int, int, optional bool, optional bool)
-        #                                         - checks number of batches is less than n_train and makes use of all data
         # constrained_float(float, string)
         #                               float     - checks the dropout is between 0 and 1
         #______________________________________________________________
@@ -619,7 +579,6 @@ class IMNN():
         # train_data                    list      - data at fiducial, lower and upper parameter values
         # num_epochs                    int       - number of epochs to train
         # n_train                       int       - number of combinations to split training set into
-        # num_batches                   int       - number of batches to process at once
         # keep_rate                     float     - keep rate for dropout
         # der_den                       array     - inverse difference between upper and lower parameter values
         # test_data            optional list      - data at fiducial, lower and upper parameter values for testing
@@ -646,24 +605,19 @@ class IMNN():
         do_test = utils.utils().check_data(n, test_data, 1, test = True)
         num_epochs = utils.utils().positive_integer(num_epochs, key = 'number of epochs')
         n_train = utils.utils().positive_integer(n_train, key = 'number of combinations')
-        num_batches = utils.utils().positive_integer(num_batches, key = 'number of batches')
-        utils.utils().enough(n_train, num_batches, modulus = True)
         keep_rate = utils.utils().constrained_float(keep_rate, key = 'dropout')
         train_F = []
         if do_test:
             test_F = []
-            ttd = n.shuffle(test_data[0], test_data[1], test_data[2], 1)
-            tt, tt_m, tt_p = n.get_combination_data(ttd, 0, 1)
+            tt, tt_m, tt_p = n.shuffle(test_data)
         tq = tqdm.trange(num_epochs)
         for epoch in tq:
-
-            td = n.shuffle(train_data[0], train_data[1], train_data[2], n_train)
+            t, t_m, t_p = n.shuffle(train_data)
             for combination in range(n_train):
-                t, t_m, t_p = n.get_combination_data(td, combination, num_batches)
-                n.sess.run(n.backpropagate, feed_dict = {n.x: t, n.x_m: t_m, n.x_p: t_p, n.dropout: keep_rate, n.dd: der_den})
-            train_F.append(np.linalg.det(n.sess.run(n.F, feed_dict = {n.x: t, n.x_m: t_m, n.x_p: t_p, n.dropout: 1., n.dd: der_den})))
+                n.sess.run(n.backpropagate, feed_dict = {n.x_central: t[combination * n.n_s: (combination + 1) * n.n_s], n.x_m: t_m[combination * n.n_p: (combination + 1) * n.n_p], n.x_p: t_p[combination * n.n_p: (combination + 1) * n.n_p], n.dropout: keep_rate, n.dd: der_den})
+            train_F.append(np.linalg.det(n.sess.run(n.F, feed_dict = {n.x_central: t[combination * n.n_s: (combination + 1) * n.n_s], n.x_m: t_m[combination * n.n_p: (combination + 1) * n.n_p], n.x_p: t_p[combination * n.n_p: (combination + 1) * n.n_p], n.dropout: 1., n.dd: der_den})))
             if do_test:
-                test_F.append(np.linalg.det(n.sess.run(n.F, feed_dict = {n.x: tt, n.x_m: tt_m, n.x_p: tt_p, n.dropout: 1., n.dd: der_den})))
+                test_F.append(np.linalg.det(n.sess.run(n.F, feed_dict = {n.x_central: tt, n.x_m: tt_m, n.x_p: tt_p, n.dropout: 1., n.dd: der_den})))
                 tq.set_postfix(detF = train_F[-1][-1], detF_test = test_F[-1][-1])
             else:
                 tq.set_postfix(detF = train_F[-1][-1])
@@ -711,7 +665,7 @@ class IMNN():
         # difference                    array     - difference between summary of real data and summaries of simulations
         # distance                      array     - Euclidean distance between real summary and summaries of simulations
         #______________________________________________________________
-        F = n.sess.run(n.F, feed_dict = {n.x: estimation_simulations[0], n.x_m: estimation_simulations[1], n.x_p: estimation_simulations[2], n.dropout: 1., n.dd: der_den})[0]
+        F = n.sess.run(n.F, feed_dict = {n.x_central: estimation_simulations[0], n.x_m: estimation_simulations[1], n.x_p: estimation_simulations[2], n.dropout: 1., n.dd: der_den})[0]
         summary = n.sess.run(n.output, feed_dict = {n.x: real_data, n.dropout: 1.})[0]
         θ = np.random.uniform(prior[0], prior[1], draws)
         if at_once:
