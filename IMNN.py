@@ -427,23 +427,53 @@ class IMNN():
             n.central_indices = tf.placeholder(tf.int32, shape = [n.n_batch], name = "central_indices")
             n.derivative_indices = tf.placeholder(tf.int32, shape = [n.n_p_batch], name = "derivative_indices")
             n.x_central = tf.constant(n.preload_data["x_central"], dtype = n._FLOATX)
-            training_input = []
-            for i in range(n.n_batch):
-                training_input.append(n.x_central[n.central_indices[i]])
-            training_input = tf.stack(training_input)
             n.x_m = tf.constant(n.preload_data["x_m"], dtype = n._FLOATX)
             n.x_m = tf.stop_gradient(n.x_m)
             n.x_p = tf.constant(n.preload_data["x_p"], dtype = n._FLOATX)
             n.x_p = tf.stop_gradient(n.x_p)
-            derivative_input_m = []
-            derivative_input_p = []
-            for i in range(n.n_p_batch):
-                derivative_input_m.append(n.x_m[n.derivative_indices[i]])
-                derivative_input_p.append(n.x_p[n.derivative_indices[i]])
-            derivative_input_m = tf.stack(derivative_input_m)
-            derivative_input_p = tf.stack(derivative_input_p)
-            derivative_input_m = tf.reshape(derivative_input_m, [n.n_p_batch * n.n_params] + n.x_m.get_shape().as_list()[2:])
-            derivative_input_p = tf.reshape(derivative_input_p, [n.n_p_batch * n.n_params] + n.x_p.get_shape().as_list()[2:])
+
+            #shape = n.x_central.get_shape().as_list()
+            #p_shape = n.x_m.get_shape().as_list()
+            #if len(shape) == 2:
+            #    indices = tf.range(shape[1])
+            #    p_indices = tf.stack(tf.meshgrid(tf.range(p_shape[1]), tf.range(p_shape[2]), indexing = 'ij'), axis = -1)
+            #elif len(shape) == 4:
+            #    indices = tf.stack(tf.meshgrid(tf.range(shape[1]), tf.range(shape[2]), tf.range(shape[3]), indexing = 'ij'), axis = -1)
+            #    p_indices = tf.stack(tf.meshgrid(tf.range(p_shape[1]), tf.range(p_shape[2]), tf.range(p_shape[3]), tf.range(p_shape[4]), indexing = 'ij'), axis = -1)
+            #elif len(shape) == 5:
+            #    indices = tf.stack(tf.meshgrid(tf.range(shape[1]), tf.range(shape[2]), tf.range(shape[3]), tf.range(shape[4]), indexing = 'ij'), axis = -1)
+            #    p_indices = tf.stack(tf.meshgrid(tf.range(p_shape[1]), tf.range(p_shape[2]), tf.range(p_shape[3]), tf.range(p_shape[4]), tf.range(p_shape[5]), indexing = 'ij'), axis = -1)
+            #
+            #else:
+            #    print("shape of the input must be [None] + input_shape where input_shape must be a list of length 1, 3 or 4.")
+
+            #gather_ind = tf.concat([n.central_indices[None, ...], indices], axis = 1)
+            #print(n.central_indices[..., None])
+            #print(indices)
+            #print(tf.concat([n.central_indices, indices], axis = -1))
+            #print(tf.stack([n.central_indices[..., None], indices[None, ...]], axis = 1))
+            #gather_ind = tf.concat([n.central_indices, indices], axis = 0)
+            #p_gather_ind = tf.concat([n.derivative_indices[None, ...], p_indices], axis = 1)
+            #p_gather_ind = tf.concat([n.derivative_indices, p_indices], axis = -1)
+
+            #training_input = tf.gather_nd(n.x_central, gather_ind)
+            #derivative_input_m = tf.gather_nd(n.x_m, p_gather_ind)
+            #derivative_input_p = tf.gather_nd(n.x_p, p_gather_ind)
+            
+            #training_input = []
+            #for i in range(n.n_batch):
+            #    training_input.append(n.x_central[n.central_indices[i]])
+            #training_input = tf.stack(training_input)
+
+            #derivative_input_m = []
+            #derivative_input_p = []
+            #for i in range(n.n_p_batch):
+            #    derivative_input_m.append(n.x_m[n.derivative_indices[i]])
+            #    derivative_input_p.append(n.x_p[n.derivative_indices[i]])
+            #derivative_input_m = tf.stack(derivative_input_m)
+            #derivative_input_p = tf.stack(derivative_input_p)
+            #derivative_input_m = tf.reshape(derivative_input_m, [n.n_p_batch * n.n_params] + n.x_m.get_shape().as_list()[2:])
+            #derivative_input_p = tf.reshape(derivative_input_p, [n.n_p_batch * n.n_params] + n.x_p.get_shape().as_list()[2:])
             if set(["x_central_test", "x_m_test", "x_p_test"]).issubset(n.preload_data.keys()):
                 test_input = tf.constant(n.preload_data["x_central_test"], dtype = n._FLOATX)
                 test_derivative_input_m = tf.constant(n.preload_data["x_m_test"], dtype = n._FLOATX)
@@ -507,7 +537,7 @@ class IMNN():
         # backpropagate               n tf opt    - minimisation scheme for the network
         #______________________________________________________________
         η = utils.utils().isfloat(η, key = 'η')
-        n.backpropagate = tf.train.AdamOptimizer(η).minimize(n.loss(n.F))
+        n.backpropagate = tf.train.GradientDescentOptimizer(η).minimize(n.loss(n.F))
 
     def shuffle(n, data, data_m, data_p, n_train):
         # SHUFFLES DATA
