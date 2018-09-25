@@ -75,10 +75,10 @@ class IMNN():
         n.n_params = u.positive_integer([parameters, 'number of parameters'])
         n.n_p = u.number_of_derivative_simulations(parameters, n)
         n.preload_data = u.check_preloaded(parameters, n)
-        if n.preload_data is not None:
-            n.n_batch = u.positive_divisible(parameters, 'number of combinations', n.n_s, 'number of simulations')
-            n.n_p_batch = u.positive_divisible(parameters, 'number of combinations', n.n_p, 'number of derivative simulations')
-            n.n_train = parameters['number of combinations']
+        #if n.preload_data is not None:
+        #    n.n_batch = u.positive_divisible(parameters, 'number of combinations', n.n_s, 'number of simulations')
+        #    n.n_p_batch = u.positive_divisible(parameters, 'number of combinations', n.n_p, 'number of derivative simulations')
+        #    n.n_train = parameters['number of combinations']
         n.n_summaries = u.positive_integer([parameters, 'number of summaries'])
         n.prebuild = u.isboolean([parameters, 'prebuild'])
         n.save_file = u.check_save_file([parameters, 'save file'])
@@ -424,62 +424,20 @@ class IMNN():
         #______________________________________________________________
         n.x = tf.placeholder(n._FLOATX, shape = [None] + n.inputs, name = "x")
         if n.preload_data is not None:
-            n.central_indices = tf.placeholder(tf.int32, shape = [n.n_batch], name = "central_indices")
-            n.derivative_indices = tf.placeholder(tf.int32, shape = [n.n_p_batch], name = "derivative_indices")
+            n.central_indices = tf.placeholder(tf.int32, shape = [n.n_s, 1], name = "central_indices")
+            n.derivative_indices = tf.placeholder(tf.int32, shape = [n.n_p, 1], name = "derivative_indices")
             n.x_central = tf.constant(n.preload_data["x_central"], dtype = n._FLOATX)
+            training_input = tf.gather_nd(n.x_central, n.central_indices)
             n.x_m = tf.constant(n.preload_data["x_m"], dtype = n._FLOATX)
             n.x_m = tf.stop_gradient(n.x_m)
+            n.derivative_input_m = tf.reshape(tf.gather_nd(n.x_m, n.derivative_indices), [n.n_p * n.n_params] + n.inputs)
             n.x_p = tf.constant(n.preload_data["x_p"], dtype = n._FLOATX)
             n.x_p = tf.stop_gradient(n.x_p)
-
-            #shape = n.x_central.get_shape().as_list()
-            #p_shape = n.x_m.get_shape().as_list()
-            #if len(shape) == 2:
-            #    indices = tf.range(shape[1])
-            #    p_indices = tf.stack(tf.meshgrid(tf.range(p_shape[1]), tf.range(p_shape[2]), indexing = 'ij'), axis = -1)
-            #elif len(shape) == 4:
-            #    indices = tf.stack(tf.meshgrid(tf.range(shape[1]), tf.range(shape[2]), tf.range(shape[3]), indexing = 'ij'), axis = -1)
-            #    p_indices = tf.stack(tf.meshgrid(tf.range(p_shape[1]), tf.range(p_shape[2]), tf.range(p_shape[3]), tf.range(p_shape[4]), indexing = 'ij'), axis = -1)
-            #elif len(shape) == 5:
-            #    indices = tf.stack(tf.meshgrid(tf.range(shape[1]), tf.range(shape[2]), tf.range(shape[3]), tf.range(shape[4]), indexing = 'ij'), axis = -1)
-            #    p_indices = tf.stack(tf.meshgrid(tf.range(p_shape[1]), tf.range(p_shape[2]), tf.range(p_shape[3]), tf.range(p_shape[4]), tf.range(p_shape[5]), indexing = 'ij'), axis = -1)
-            #
-            #else:
-            #    print("shape of the input must be [None] + input_shape where input_shape must be a list of length 1, 3 or 4.")
-
-            #gather_ind = tf.concat([n.central_indices[None, ...], indices], axis = 1)
-            #print(n.central_indices[..., None])
-            #print(indices)
-            #print(tf.concat([n.central_indices, indices], axis = -1))
-            #print(tf.stack([n.central_indices[..., None], indices[None, ...]], axis = 1))
-            #gather_ind = tf.concat([n.central_indices, indices], axis = 0)
-            #p_gather_ind = tf.concat([n.derivative_indices[None, ...], p_indices], axis = 1)
-            #p_gather_ind = tf.concat([n.derivative_indices, p_indices], axis = -1)
-
-            #training_input = tf.gather_nd(n.x_central, gather_ind)
-            #derivative_input_m = tf.gather_nd(n.x_m, p_gather_ind)
-            #derivative_input_p = tf.gather_nd(n.x_p, p_gather_ind)
-            
-            #training_input = []
-            #for i in range(n.n_batch):
-            #    training_input.append(n.x_central[n.central_indices[i]])
-            #training_input = tf.stack(training_input)
-
-            #derivative_input_m = []
-            #derivative_input_p = []
-            #for i in range(n.n_p_batch):
-            #    derivative_input_m.append(n.x_m[n.derivative_indices[i]])
-            #    derivative_input_p.append(n.x_p[n.derivative_indices[i]])
-            #derivative_input_m = tf.stack(derivative_input_m)
-            #derivative_input_p = tf.stack(derivative_input_p)
-            #derivative_input_m = tf.reshape(derivative_input_m, [n.n_p_batch * n.n_params] + n.x_m.get_shape().as_list()[2:])
-            #derivative_input_p = tf.reshape(derivative_input_p, [n.n_p_batch * n.n_params] + n.x_p.get_shape().as_list()[2:])
+            n.derivative_input_p = tf.reshape(tf.gather_nd(n.x_p, n.derivative_indices), [n.n_p * n.n_params] + n.inputs)
             if set(["x_central_test", "x_m_test", "x_p_test"]).issubset(n.preload_data.keys()):
                 test_input = tf.constant(n.preload_data["x_central_test"], dtype = n._FLOATX)
-                test_derivative_input_m = tf.constant(n.preload_data["x_m_test"], dtype = n._FLOATX)
-                test_derivative_input_m = tf.reshape(test_derivative_input_m, [np.prod(test_derivative_input_m.get_shape().as_list()[:2])] + test_derivative_input_m.get_shape().as_list()[2:])
-                test_derivative_input_p = tf.constant(n.preload_data["x_p_test"], dtype = n._FLOATX)
-                test_derivative_input_p = tf.reshape(test_derivative_input_p, [np.prod(test_derivative_input_p.get_shape().as_list()[:2])] + test_derivative_input_p.get_shape().as_list()[2:])
+                test_derivative_input_m = tf.reshape(tf.constant(n.preload_data["x_m_test"], dtype = n._FLOATX), [n.n_p * n.n_params] + n.inputs)
+                test_derivative_input_p = tf.reshape(tf.constant(n.preload_data["x_p_test"], dtype = n._FLOATX), [n.n_p * n.n_params] + n.inputs)
             else:
                 test_input = None
         else:
@@ -511,9 +469,9 @@ class IMNN():
                     scope.reuse_variables()
                     test_output_p = network(test_derivative_input_p, 1.)
             scope.reuse_variables()
-            output_m = network(derivative_input_m, n.dropout)
+            output_m = network(n.derivative_input_m, n.dropout)
             scope.reuse_variables()
-            output_p = network(derivative_input_p, n.dropout)
+            output_p = network(n.derivative_input_p, n.dropout)
         n.F = n.Fisher(output_central, output_m, output_p, n.dd)
         if n.preload_data is not None and test_input is not None:
             n.test_F = n.Fisher(test_output_central, test_output_m, test_output_p, n.dd)
@@ -537,7 +495,8 @@ class IMNN():
         # backpropagate               n tf opt    - minimisation scheme for the network
         #______________________________________________________________
         η = utils.utils().isfloat(η, key = 'η')
-        n.backpropagate = tf.train.GradientDescentOptimizer(η).minimize(n.loss(n.F))
+        #n.backpropagate = tf.train.GradientDescentOptimizer(η).minimize(n.loss(n.F))
+        n.backpropagate = tf.train.AdamOptimizer(η).minimize(n.loss(n.F))
 
     def shuffle(n, data, data_m, data_p, n_train):
         # SHUFFLES DATA
@@ -693,7 +652,7 @@ class IMNN():
         else:
             return train_F
 
-    def train_with_preloaded(n, num_epochs, keep_rate, der_den):
+    def train_with_preloaded(n, num_epochs, n_train, keep_rate, der_den):
         # TRAIN INFORMATION MAXIMISING NEURAL NETWORK
         #______________________________________________________________
         # RETURNS
@@ -743,12 +702,13 @@ class IMNN():
         # t_m                           array     - more reshaped single combination of data below fiducial parameter value
         # t_p                           array     - more reshaped single combination of data above fiducial parameter value
         #______________________________________________________________
+        n_train = utils.utils().positive_integer(n_train, key = 'number of combinations (n_train)')
         num_epochs = utils.utils().positive_integer(num_epochs, key = 'number of epochs')
         keep_rate = utils.utils().constrained_float(keep_rate, key = 'dropout')
 
         train_F = []
-        central_indices = np.arange(n.n_s)
-        derivative_indices = np.arange(n.n_p)
+        central_indices = np.arange(n.n_s * n_train)
+        derivative_indices = np.arange(n.n_p * n_train)
         if n.test_F is not None:
             test = True
             test_F = []
@@ -758,9 +718,9 @@ class IMNN():
         for epoch in tq:
             np.random.shuffle(central_indices)
             np.random.shuffle(derivative_indices)
-            for combination in range(n.n_train):
-                n.sess.run(n.backpropagate, feed_dict = {n.central_indices: central_indices[combination * n.n_batch: (combination + 1) * n.n_batch], n.derivative_indices: derivative_indices[combination * n.n_p_batch: (combination + 1) * n.n_p_batch], n.dropout: keep_rate, n.dd: der_den})
-            train_F.append(np.linalg.det(n.sess.run(n.F, feed_dict = {n.central_indices: central_indices[combination * n.n_batch: (combination + 1) * n.n_batch], n.derivative_indices: derivative_indices[combination * n.n_p_batch: (combination + 1) * n.n_p_batch], n.dropout: 1., n.dd: der_den})))
+            for combination in range(n_train):
+                n.sess.run(n.backpropagate, feed_dict = {n.central_indices: central_indices[combination * n.n_s: (combination + 1) * n.n_s].reshape((n.n_s, 1)), n.derivative_indices: derivative_indices[combination * n.n_p: (combination + 1) * n.n_p].reshape((n.n_p, 1)), n.dropout: keep_rate, n.dd: der_den})
+            train_F.append(np.linalg.det(n.sess.run(n.F, feed_dict = {n.central_indices: central_indices[combination * n.n_s: (combination + 1) * n.n_s].reshape((n.n_s, 1)), n.derivative_indices: derivative_indices[combination * n.n_p: (combination + 1) * n.n_p].reshape((n.n_p, 1)), n.dropout: 1., n.dd: der_den})))
             if test:
                  test_F.append(np.linalg.det(n.sess.run(n.test_F, feed_dict = {n.dd: der_den})))
                  tq.set_postfix(detF = train_F[-1], detF_test = test_F[-1])
