@@ -343,23 +343,23 @@ class IMNN():
         # a_p_                          tensor    - reshaped network outputs for upper parameter simulations
         # dμdθ                        n tensor    - numerical derivative of the mean of network outputs
         #______________________________________________________________
-        a_ = tf.reshape(a, (-1, n.n_s, n.n_summaries), name = 'central_output')
+        a_ = tf.reshape(a, (n.n_s, n.n_summaries), name = 'central_output')
         if n.verbose: print(a_)
-        n.μ = tf.reduce_mean(a_, axis = 1, keepdims = True, name = 'central_mean')
+        n.μ = tf.reduce_mean(a_, axis = 0, keepdims = True, name = 'central_mean')
         if n.verbose: print(n.μ)
         outmm = tf.subtract(a_, n.μ, name = 'central_difference_from_mean')
         if n.verbose: print(outmm)
-        n.C = tf.divide(tf.einsum('ijk,ijl->ikl', outmm, outmm), tf.constant((n.n_s - 1.), dtype = n._FLOATX), name = 'central_covariance')
+        n.C = tf.divide(tf.einsum('ij,ik->jk', outmm, outmm), tf.constant((n.n_s - 1.), dtype = n._FLOATX), name = 'central_covariance')
         if n.verbose: print(n.C)
         n.iC = tf.matrix_inverse(n.C, name = 'central_inverse_covariance')
         if n.verbose: print(n.iC)
-        a_m_ = tf.reshape(a_m, (-1, n.n_p, n.n_params, n.n_summaries), name = 'lower_output')
+        a_m_ = tf.reshape(a_m, (n.n_p, n.n_params, n.n_summaries), name = 'lower_output')
         if n.verbose: print(a_m_)
-        a_p_ = tf.reshape(a_p, (-1, n.n_p, n.n_params, n.n_summaries), name = 'upper_output')
+        a_p_ = tf.reshape(a_p, (n.n_p, n.n_params, n.n_summaries), name = 'upper_output')
         if n.verbose: print(a_p_)
-        n.dμdθ = tf.divide(tf.einsum('ijkl,k->ikl', tf.subtract(a_p_, a_m_), dd), tf.constant(n.n_p, dtype = n._FLOATX), name = 'mean_derivative')
+        n.dμdθ = tf.divide(tf.einsum('ijk,j->jk', tf.subtract(a_p_, a_m_), dd), tf.constant(n.n_p, dtype = n._FLOATX), name = 'mean_derivative')
         if n.verbose: print(n.dμdθ)
-        return tf.einsum('ijk,ilk->ijl', n.dμdθ, tf.einsum('ijk,ilk->ilj', n.iC, n.dμdθ))
+        return tf.einsum('ij,kj->ik', n.dμdθ, tf.einsum('ij,kj->ki', n.iC, n.dμdθ))
 
     def asymptotic_likelihood(n):
         # CALCULATE THE ASYMPTOTIC LIKELIHOOD
@@ -384,8 +384,8 @@ class IMNN():
         # approximate_likelihood        tensor    - approximate likelihood over prior range
         #______________________________________________________________
         Δθ = n.prior - tf.expand_dims(n.θ_fid, 2)
-        approximate_likelihood = tf.exp(- 0.5 * (tf.expand_dims(tf.expand_dims(tf.einsum("ij,ij->i", n.output, tf.einsum("ijk,ik->ij", n.iC, n.output)), 1) + tf.einsum("ijk,ik->ij", n.μ, tf.einsum("ijk,ik->ij", n.iC, n.output)) + tf.einsum("ij,ikj->ik", n.output, tf.einsum("ijk,ilk->ilj", n.iC, n.μ)) + tf.einsum("ijk,ijk->ij", n.μ, tf.einsum("ijk,ilk->ilj", n.iC, n.μ)), 2) - tf.einsum("ijk,ij->ijk", Δθ, tf.einsum("ijk,ik->ij", n.dμdθ, tf.einsum("ijk,ik->ij", n.iC, n.output))) - tf.einsum("ijk,ij->ijk", Δθ, tf.einsum("ij,ikj->ik", n.output, tf.einsum("ijk,ilk->ilj", n.iC, n.dμdθ))) + tf.einsum("ijk,ij->ijk", Δθ, tf.einsum("ijk,ijk->ij", n.dμdθ, tf.einsum("ijk,ilk->ilj", n.iC, n.μ))) + tf.einsum("ijk,ij->ijk", Δθ, tf.einsum("ijk,ijk->ij", n.μ, tf.einsum("ijk,ilk->ilj", n.iC, n.dμdθ))) + tf.einsum("ijk,ijk->ijk", Δθ, tf.einsum("ijk,ij->ijk", Δθ, tf.einsum("ijk,ijk->ij", n.dμdθ, tf.einsum("ijk,ilk->ilj", n.iC, n.dμdθ))))))
-        return approximate_likelihood / tf.reduce_sum(approximate_likelihood * (n.prior[:, :, 1] - n.prior[:, :, 0]), 2)
+        asymptotic_likelihood = tf.exp(- 0.5 * (tf.expand_dims(tf.expand_dims(tf.einsum("ij,ij->i", n.output, tf.einsum("ij,kj->ki", n.iC, n.output)), 1) + tf.einsum("ij,kj->ki", n.μ, tf.einsum("ij,kj->ki", n.iC, n.output)) + tf.einsum("ij,kj->ik", n.output, tf.einsum("ij,kj->ki", n.iC, n.μ)) + tf.einsum("ij,ij->i", n.μ, tf.einsum("ij,kj->ki", n.iC, n.μ)), 2) - tf.einsum("ijk,ij->ijk", Δθ, tf.einsum("ij,kj->ki", n.dμdθ, tf.einsum("ij,kj->ki", n.iC, n.output))) - tf.einsum("ijk,ij->ijk", Δθ, tf.einsum("ij,kj->ik", n.output, tf.einsum("ij,kj->ki", n.iC, n.dμdθ))) + tf.einsum("ijk,j->ijk", Δθ, tf.einsum("ij,ij->i", n.dμdθ, tf.einsum("ij,kj->ki", n.iC, n.μ))) + tf.einsum("ijk,j->ijk", Δθ, tf.einsum("ij,ij->i", n.μ, tf.einsum("ij,kj->ki", n.iC, n.dμdθ))) + tf.einsum("ijk,ijk->ijk", Δθ, tf.einsum("ijk,j->ijk", Δθ, tf.einsum("ij,ij->i", n.dμdθ, tf.einsum("ij,kj->ki", n.iC, n.dμdθ))))))
+        return asymptotic_likelihood / tf.reduce_sum(tf.einsum("ijk,ij->ijk", asymptotic_likelihood, (n.prior[:, :, 1] - n.prior[:, :, 0])), 2, keepdims = True)
 
     def maximumlikelihoodestimate(n):
         # CALCULATE THE MAXIMUM LIKELIHOOD ESTIMATE
@@ -409,7 +409,7 @@ class IMNN():
         # iF                            tensor    - inverse Fisher information matrix from fiducial simulations
         #______________________________________________________________
         iF = tf.matrix_inverse(n.F)
-        return tf.expand_dims(n.θ_fid, 2) + tf.einsum("ijk,ikl->ijl", iF, tf.einsum("ijk,ilk->ilj", n.iC, tf.einsum("ijk,ijk->ijk", n.dμdθ, tf.expand_dims(n.output, 1) - n.μ)))
+        return n.θ_fid + tf.einsum("ij,kj->ki", iF, tf.einsum("ij,kij->ki", tf.einsum("ij,kj->ki", n.iC, n.dμdθ), tf.expand_dims(n.output, 1) - tf.expand_dims(n.μ, 0)))
 
     def loss(n, F):
         # CALCULATE THE LOSS FUNCTION
@@ -428,7 +428,7 @@ class IMNN():
         # VARIABLES
         # IFI                           tensor    - determinant of the Fisher information matrix
         #______________________________________________________________
-        IFI = tf.matrix_determinant(tf.reduce_sum(F, axis = 0))
+        IFI = tf.matrix_determinant(F)
         return tf.multiply(tf.constant(-0.5, dtype = n._FLOATX), tf.square(IFI))
 
     def setup(n, η, network = None):
@@ -513,7 +513,6 @@ class IMNN():
         n.training_scheme(η)
         n.begin_session()
 
-
     def training_scheme(n, η):
         # MINIMISATION SCHEME FOR BACKPROPAGATION
         #______________________________________________________________
@@ -531,7 +530,7 @@ class IMNN():
         # backpropagate               n tf opt    - minimisation scheme for the network
         #______________________________________________________________
         η = utils.utils().isfloat(η, key = 'η')
-        n.backpropagate = tf.train.GradientDescentOptimizer(η).minimize(n.loss(n.F))
+        n.backpropagate = tf.train.AdamOptimizer(η).minimize(n.loss(n.F))
 
     def shuffle(n, data):
         # SHUFFLES DATA
@@ -618,9 +617,9 @@ class IMNN():
             train_F.append(np.linalg.det(n.sess.run(n.F, feed_dict = {n.x_central: t[combination * n.n_s: (combination + 1) * n.n_s], n.x_m: t_m[combination * n.n_p: (combination + 1) * n.n_p], n.x_p: t_p[combination * n.n_p: (combination + 1) * n.n_p], n.dropout: 1., n.dd: der_den})))
             if do_test:
                 test_F.append(np.linalg.det(n.sess.run(n.F, feed_dict = {n.x_central: tt, n.x_m: tt_m, n.x_p: tt_p, n.dropout: 1., n.dd: der_den})))
-                tq.set_postfix(detF = train_F[-1][-1], detF_test = test_F[-1][-1])
+                tq.set_postfix(detF = train_F[-1], detF_test = test_F[-1])
             else:
-                tq.set_postfix(detF = train_F[-1][-1])
+                tq.set_postfix(detF = train_F[-1])
         if n.save_file is not None:
             n.save_network()
         if do_test:
@@ -665,7 +664,7 @@ class IMNN():
         # difference                    array     - difference between summary of real data and summaries of simulations
         # distance                      array     - Euclidean distance between real summary and summaries of simulations
         #______________________________________________________________
-        F = n.sess.run(n.F, feed_dict = {n.x_central: estimation_simulations[0], n.x_m: estimation_simulations[1], n.x_p: estimation_simulations[2], n.dropout: 1., n.dd: der_den})[0]
+        F = n.sess.run(n.F, feed_dict = {n.x_central: estimation_simulations[0], n.x_m: estimation_simulations[1], n.x_p: estimation_simulations[2], n.dropout: 1., n.dd: der_den})
         summary = n.sess.run(n.output, feed_dict = {n.x: real_data, n.dropout: 1.})[0]
         θ = np.random.uniform(prior[0], prior[1], draws)
         if at_once:
