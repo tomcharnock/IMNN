@@ -13,10 +13,10 @@ class IMNN():
         # FUNCTIONS (DEFINED IN utils.py)
         # check_params(dict)                      - checks that all necessary parameters are in dictionary
         # isboolean(list)               bool      - checks that parameter is a boolean
+        # inputs(dict)                  list      - checks shape of network input
         # positive_integer(list)        int       - checks that parameter is a positive integer
         # number_of_derivative_simulations(dict, class)
         #                                         - calculates the number of simulations to use for numerical derivative
-        # inputs(dict)                  int/list  - checks shape of network input
         # check_preloaded(dict, class)  dict/None - checks preloaded data or returns None if not preloading
         # check_save_file(dict)         str/None  - checks that file name is a string or None
         # isfloat(list)                 float     - checks that parameter is a float
@@ -32,16 +32,12 @@ class IMNN():
         # u                             class     - utility functions
         # _FLOATX                     n tf type   - set TensorFlow types to 32 bit (for GPU)
         # verbose                     n bool      - True to print outputs such as shape of tensors
-        # n_params                    n int       - number of parameters in the model
-        # n_s                         n int       - total number of simulations
-        # n_batch                     n int       - number of simulations per combination
-        # n_p                         n int       - number of differentiation simulations
-        # n_p_batch                   n int       - number of derivative simulations per combination
-        # n_train                     n int       - number of combinations to split simulations into
-        # n_summaries                 n int       - number of outputs from the network
         # inputs                      n list      - shape of input (list)
+        # n_s                         n int       - total number of simulations
+        # n_params                    n int       - number of parameters in the model
+        # n_p                         n int       - number of differentiation simulations
         # preload_data                n dict/None - training data to be preloaded to GPU
-        # η                           n float     - learning rate
+        # n_summaries                 n int       - number of outputs from the network
         # prebuild                    n bool      - True to allow IMNN to build the network
         # save_file                   n str/None  - Name to save or load graph. None does not save graph
         # get_MLE                     n bool      - True to calculate MLE
@@ -49,14 +45,17 @@ class IMNN():
         # allow_init                  n bool      - True if nw < 0 so network calculates weight variance
         # bb                          n float     - constant bias initialiser value
         # activation                  n tf func   - activation function to use
-        # take_α                      n bool      - True is an extra parameter is needed in the activation function
+        # takes_α                     n bool      - True is an extra parameter is needed in the activation function
         # α                           n float/int - extra parameter if needed for activation function (can be None)
         # layers                      n list      - contains the neural architecture of the network
         # sess        begin_session() n session   - interactive tensorflow session (with initialised parameters)
         # x                   setup() n tensor    - fiducial simulation input tensor
-        # θ_fid               setup() n tensor    - fiducial parameter input tensor for calculation MLE
-        # prior                       n tensor    - prior range for each parameter for calculating MLE
         # x_central           setup() n tensor    - input tensor for fiducial simulations
+        # central_indices     setup() n tensor    - list of indices to select preloaded central data at
+        # derivative_indices  setup() n tensor    - list of indices to select preloaded derivative data at
+        # test_F              setup() n tensor    - Fisher information from test data
+        # θ_fid               setup() n tensor    - fiducial parameter input tensor for calculation MLE
+        # prior               setup() n tensor    - prior range for each parameter for calculating MLE
         # x_m                 setup() n tensor    - below fiducial simulation input tensor
         # x_p                 setup() n tensor    - above fiducial simulation input tensor
         # dd                  setup() n tensor    - inverse difference between upper and lower parameter value
@@ -70,9 +69,7 @@ class IMNN():
         # C                  Fisher() n tensor    - covariance of network outputs for fiducial simulations
         # iC                 Fisher() n tensor    - inverse covariance of network outputs for fiducial simulations
         # dμdθ               Fisher() n tensor    - numerical derivative of the mean of network outputs
-        # central_indices     setup() n tensor    - list of indices to select preloaded central data at
-        # derivative_indices  setup() n tensor    - list of indices to select preloaded derivative data at
-        # test_F              setup() n tensor    - Fisher information from test data
+        # saver        save_network() n tf op     - saver operation for saving model
         #______________________________________________________________
         u = utils.utils()
         n._FLOATX = tf.float32
@@ -94,7 +91,7 @@ class IMNN():
             n.bb = u.isfloat([parameters, 'bb'])
             n.activation, n.takes_α, n.α = u.activation(parameters)
             n.layers = u.hidden_layers(parameters, n)
-        n.sess, n.x, n.x_central, n.central_indices, n.derivative_indices, n.test_F, n.θ_fid, n.prior, n.x_m, n.x_p, n.dd, n.dropout, n.output, n.F, n.backpropagate, n.μ, n.C, n.iC, n.dμdθ, n.MLE, n.AL = u.initialise_variables()
+        n.sess, n.x, n.x_central, n.central_indices, n.derivative_indices, n.test_F, n.θ_fid, n.prior, n.x_m, n.x_p, n.dd, n.dropout, n.output, n.F, n.MLE, n.AL, n.backpropagate, n.μ, n.C, n.iC, n.dμdθ, n.saver = u.initialise_variables()
 
     def begin_session(n):
         # BEGIN TENSORFLOW SESSION AND INITIALISE PARAMETERS
@@ -128,8 +125,9 @@ class IMNN():
         # SAVE NETWORK AS A TENSORFLOW SAVER METAFILE
         #______________________________________________________________
         # INPUTS
-        # save_file                   n str/None  - name of the file to reload (ending in .meta)
+        # file_name                     str/None  - name of the file to reload (ending in .meta)
         # first_time                    bool      - whether to save the meta graph or not
+        # save_file                   n str/None  - name of the file to reload (ending in .meta)
         #______________________________________________________________
         # VARIABLES
         # saver                       n tf op     - saving operation from tensorflow
@@ -152,11 +150,11 @@ class IMNN():
         # RESTORES NETWORK FROM TENSORFLOW SAVER METAFILE
         #______________________________________________________________
         # INPUTS
-        # file                          string    - name of the file to reload (ending in .meta)
+        # save_file                   n string    - name of the file to reload (ending in .meta)
         #______________________________________________________________
         # VARIABLES
+        # config                                  - tensorflow GPU configuration options
         # sess                        n session   - interactive tensorflow session (with initialised parameters)
-        # save_file                   n string    - name of the file to reload (ending in .meta)
         # loader                        tf op     - loading operation from tensorflow
         # x                           n tensor    - fiducial simulation input tensor
         # x_central                   n tensor    - fixed-sized fiducial simulation input tensor
@@ -166,11 +164,15 @@ class IMNN():
         # dropout                     n tensor    - keep rate for dropout layer
         # output                      n tensor    - network output for simulations at fiducial parameter value
         # F                           n tensor    - Fisher information matrix
-        # backpropagate               n tf opt    - minimisation scheme for the network
         # C                           n tensor    - covariance of network outputs for fiducial simulations
+        # iC                          n tensor    - inverse covariance of network outputs for fiducial simulations
+        # μ                           n tensor    - mean of network outputs for fiducial simulations
         # dμdθ                        n tensor    - numerical derivative of the mean of network outputs
-        # MLE                 setup() n tensor    - MLE of parameters
-        # AL                  setup() n tensor    - asymptotic likelihood at range of parameter values
+        # MLE                         n tensor    - MLE of parameters
+        # AL                          n tensor    - asymptotic likelihood at range of parameter values
+        # central_indices             n tensor    - list of indices to select preloaded central data at
+        # derivative_indices          n tensor    - list of indices to select preloaded derivative data at
+        # backpropagate               n tf opt    - minimisation scheme for the network
         #______________________________________________________________
         if n.save_file is not None:
             config = tf.ConfigProto()
@@ -195,6 +197,9 @@ class IMNN():
             if n.get_MLE:
                 n.MLE = tf.get_default_graph().get_tensor_by_name("maximum_likelihood_estimate:0")
                 n.AL = tf.get_default_graph().get_tensor_by_name("asymptotic_likelihood:0")
+            if "central_indices" in [v.name for v in n.sess.graph.get_operations()]:
+                n.central_indices = tf.get_default_graph().get_tensor_by_name("central_indices:0")
+                n.derivative_indices = tf.get_default_graph().get_tensor_by_name("derivative_indices:0")
             n.backpropagate = tf.get_default_graph().get_operation_by_name("Adam")
 
     def dense(n, input_tensor, l, dropout):
@@ -334,6 +339,29 @@ class IMNN():
         return layer[-1]
 
     def inverse_covariance(n, a):
+        # CALCULATE THE INVERSE COVARIANCE, MEAN AND COVARIANCE
+        #______________________________________________________________
+        # CALLED FROM (DEFINED IN IMNN.py)
+        # Fisher(tensor, tensor, tensor, tensor)
+        #                               tensor    - builds generic or auto built network
+        #______________________________________________________________
+        # RETURNS
+        # tensor, tensor, tensor
+        # inverse covariance, mean, covariance
+        #______________________________________________________________
+        # INPUTS
+        # a                             tensor    - network output for simulations at fiducial parameter value
+        # n_s                         n int       - number of simulations in each combination
+        # n_summaries                 n int       - number of outputs from the network
+        # verbose                     n bool      - True to print outputs such as shape of tensors
+        #______________________________________________________________
+        # VARIABLES
+        # a_                            tensor    - reshaped network outputs for fiducial simulations
+        # μ                           n tensor    - mean of network outputs for fiducial simulations
+        # outmm                         tensor    - difference between mean and network outputs for fiducial simulations
+        # C                           n tensor    - covariance of network outputs for fiducial simulations
+        # iC                          n tensor    - inverse covariance of network outputs for fiducial simulations
+        #______________________________________________________________
         a_ = tf.reshape(a, (n.n_s, n.n_summaries), name = 'central_output')
         if n.verbose: print(a_)
         μ = tf.reduce_mean(a_, axis = 0, keepdims = True, name = 'central_mean')
@@ -347,6 +375,29 @@ class IMNN():
         return iC, μ, C
 
     def derivative_mean(n, a_m, a_p, dd):
+        # CALCULATE THE DERIVATIVE OF THE MEAN OF THE SIMULATIONS
+        #______________________________________________________________
+        # CALLED FROM (DEFINED IN IMNN.py)
+        # Fisher(tensor, tensor, tensor, tensor)
+        #                               tensor    - builds generic or auto built network
+        #______________________________________________________________
+        # RETURNS
+        # tensor
+        # Derivative of the mean of the simulations
+        #______________________________________________________________
+        # INPUTS
+        # a_m                           tensor    - network output for simulations below fiducial parameter value
+        # a_p                           tensor    - network output for simulations above fiducial parameter value
+        # dd                            tensor    - inverse difference between upper and lower parameter value
+        # n_summaries                 n int       - number of outputs from the network
+        # verbose                     n bool      - True to print outputs such as shape of tensors
+        # n_p                         n int       - number of differentiation simulations in each combination
+        #______________________________________________________________
+        # VARIABLES
+        # a_m_                          tensor    - reshaped network outputs for lower parameter simulations
+        # a_p_                          tensor    - reshaped network outputs for upper parameter simulations
+        # dμdθ                        n tensor    - numerical derivative of the mean of network outputs
+        #______________________________________________________________
         a_m_ = tf.reshape(a_m, (n.n_p, n.n_params, n.n_summaries), name = 'lower_output')
         if n.verbose: print(a_m_)
         a_p_ = tf.reshape(a_p, (n.n_p, n.n_params, n.n_summaries), name = 'upper_output')
@@ -362,28 +413,21 @@ class IMNN():
         # setup(optional func)                    - builds generic or auto built network
         #______________________________________________________________
         # RETURNS
-        # tensor
-        # Fisher information matrix
+        # tensor, tensor, tensor, tensor, tensor
+        # Fisher information matrix, inverse covariance, mean, derivative of the mean, covariance
         #______________________________________________________________
         # INPUTS
         # a                             tensor    - network output for simulations at fiducial parameter value
         # a_m                           tensor    - network output for simulations below fiducial parameter value
         # a_p                           tensor    - network output for simulations above fiducial parameter value
         # dd                            tensor    - inverse difference between upper and lower parameter value
-        # n_s                         n int       - number of simulations in each combination
-        # n_summaries                 n int       - number of outputs from the network
-        # verbose                     n bool      - True to print outputs such as shape of tensors
-        # n_p                         n int       - number of differentiation simulations in each combination
         #______________________________________________________________
         # VARIABLES
-        # a_                            tensor    - reshaped network outputs for fiducial simulations
-        # μ                           n tensor    - mean of network outputs for fiducial simulations
-        # outmm                         tensor    - difference between mean and network outputs for fiducial simulations
-        # C                           n tensor    - covariance of network outputs for fiducial simulations
-        # iC                          n tensor    - inverse covariance of network outputs for fiducial simulations
-        # a_m_                          tensor    - reshaped network outputs for lower parameter simulations
-        # a_p_                          tensor    - reshaped network outputs for upper parameter simulations
-        # dμdθ                        n tensor    - numerical derivative of the mean of network outputs
+        # μ                             tensor    - mean of network outputs for fiducial simulations
+        # C                             tensor    - covariance of network outputs for fiducial simulations
+        # iC                            tensor    - inverse covariance of network outputs for fiducial simulations
+        # dμdθ                          tensor    - numerical derivative of the mean of network outputs
+        # F                             tensor    - Fisher information matrix
         #______________________________________________________________
         iC, μ, C = n.inverse_covariance(a)
         dμdθ = n.derivative_mean(a_m, a_p, dd)
@@ -405,7 +449,7 @@ class IMNN():
         # θ_fid                       n tensor    - fiducial parameter input tensor for calculating MLE
         # prior                       n tensor    - prior range for each parameter for calculating MLE
         # μ                           n tensor    - mean of network outputs for fiducial simulations
-        # Ci                          n tensor    - inverse covariance of network outputs for fiducial simulations
+        # iC                          n tensor    - inverse covariance of network outputs for fiducial simulations
         # dμdθ                        n tensor    - numerical derivative of the mean of network outputs
         #______________________________________________________________
         # VARIABLES
@@ -597,34 +641,9 @@ class IMNN():
         # backpropagate               n tf opt    - minimisation scheme for the network
         #______________________________________________________________
         η = utils.utils().isfloat(η, key = 'η')
-        #n.backpropagate = tf.train.AdamOptimizer(η).minimize(n.loss(n.F))
-        n.backpropagate = tf.train.GradientDescentOptimizer(η).minimize(n.loss(n.F))
+        n.backpropagate = tf.train.AdamOptimizer(η).minimize(n.loss(n.F))
 
-    def shuffle(n, data):
-        # SHUFFLES DATA
-        #______________________________________________________________
-        # CALLED FROM (DEFINED IN IMNN.py)
-        # train(list, int, int, float, array, optional list)
-        #                                         - trains the network
-        #______________________________________________________________
-        # RETURNS
-        # list
-        #______________________________________________________________
-        # INPUTS
-        # data                          list      - list containing data to be shuffled
-        #______________________________________________________________
-        # VARIABLE
-        # seed                          int       - seed for shuffling derivatives correctly
-        #______________________________________________________________
-        np.random.shuffle(data['x_central'])
-        seed = np.random.randint(1e6)
-        np.random.seed(seed)
-        np.random.shuffle(data['x_m'])
-        np.random.seed(seed)
-        np.random.shuffle(data['x_p'])
-        #return data
-
-    def train(n, data, num_epochs, n_train, keep_rate, der_den, test = False):
+    def train(n, num_epochs, n_train, keep_rate, der_den, data = None):
         # TRAIN INFORMATION MAXIMISING NEURAL NETWORK
         #______________________________________________________________
         # RETURNS
@@ -668,106 +687,41 @@ class IMNN():
         # t_m                           array     - more reshaped single combination of data below fiducial parameter value
         # t_p                           array     - more reshaped single combination of data above fiducial parameter value
         #______________________________________________________________
-        #utils.utils().check_data(n, train_data, n_train)
-        #do_test = utils.utils().check_data(n, test_data, 1, test = True)
         num_epochs = utils.utils().positive_integer(num_epochs, key = 'number of epochs')
         n_train = utils.utils().positive_integer(n_train, key = 'number of combinations')
         keep_rate = utils.utils().constrained_float(keep_rate, key = 'dropout')
         train_F = []
-        if test:
-            test_F = []
-        tq = tqdm.trange(num_epochs)
-        for epoch in tq:
-            n.shuffle(data)
-            for combination in range(n_train):
-                n.sess.run(n.backpropagate, feed_dict = {n.x_central: data['x_central'][combination * n.n_s: (combination + 1) * n.n_s], n.x_m: data['x_m'][combination * n.n_p: (combination + 1) * n.n_p], n.x_p: data['x_p'][combination * n.n_p: (combination + 1) * n.n_p], n.dropout: keep_rate, n.dd: der_den})
-            train_F.append(np.linalg.det(n.sess.run(n.F, feed_dict = {n.x_central: data['x_central'][combination * n.n_s: (combination + 1) * n.n_s], n.x_m: data['x_m'][combination * n.n_p: (combination + 1) * n.n_p], n.x_p: data['x_p'][combination * n.n_p: (combination + 1) * n.n_p], n.dropout: 1., n.dd: der_den})))
-            if test:
-                test_F.append(np.linalg.det(n.sess.run(n.test_F, feed_dict = {n.x_central: data['x_central_test'], n.x_m: data['x_m_test'], n.x_p: data['x_p_test'], n.dropout: 1., n.dd: der_den})))
-                tq.set_postfix(detF = train_F[-1], detF_test = test_F[-1])
-            else:
-                tq.set_postfix(detF = train_F[-1])
-        if n.save_file is not None:
-            n.save_network()
-        if test:
-            return train_F, test_F
-        else:
-            return train_F
 
-    def train_with_preloaded(n, num_epochs, n_train, keep_rate, der_den):
-        # TRAIN INFORMATION MAXIMISING NEURAL NETWORK
-        #______________________________________________________________
-        # RETURNS
-        # list or list, list
-        # determinant of Fisher information matrix at the end of each epoch for train data (and test data)
-        #______________________________________________________________
-        # FUNCTIONS (DEFINED IN IMNN.py)
-        # shuffle(array, array, array)  array     - shuffles the simulations on each epoch
-        # get_combination_data(list, int, int)
-        #                               array, array, array
-        #                                         - gets individual combination of data
-        # save_network(optional Bool)             - saves the network (if n.save_file is not None)
-        #______________________________________________________________
-        # FUNCTIONS (DEFINED IN utils.py)
-        # check_data(class, list, int, optional bool)
-        #                               bool      - checks whether data is of correct format (and whether to use test data)
-        # positive_integer(list)        int       - checks that parameter is a positive integer
-        # enough(int, int, optional bool, optional bool)
-        #                                         - checks number of batches is less than n_train and makes use of all data
-        # constrained_float(float, string)
-        #                               float     - checks the dropout is between 0 and 1
-        #______________________________________________________________
-        # INPUTS
-        # train_data                    list      - data at fiducial, lower and upper parameter values
-        # num_epochs                    int       - number of epochs to train
-        # n_train                       int       - number of combinations to split training set into
-        # num_batches                   int       - number of batches to process at once
-        # keep_rate                     float     - keep rate for dropout
-        # der_den                       array     - inverse difference between upper and lower parameter values
-        # test_data            optional list      - data at fiducial, lower and upper parameter values for testing
-        # sess                        n session   - interactive tensorflow session (with initialised parameters)
-        # backpropagate               n tf opt    - minimisation scheme for the network
-        # x                           n tensor    - fiducial simulation input tensor
-        # x_m                         n tensor    - below fiducial simulation input tensor
-        # x_p                         n tensor    - above fiducial simulation input tensor
-        # dropout                     n tensor    - keep rate for dropout layer
-        # dd                          n tensor    - inverse difference between upper and lower parameter value
-        # F                           n tensor    - Fisher information matrix
-        #______________________________________________________________
-        # VARIABLES
-        # do_test                       bool      - True if using test_data
-        # train_F                       list      - determinant Fisher information matrix at end of train epoch
-        # test_F                        list      - determinant Fisher information matrix of test data at end of epoch
-        # epoch                         int       - epoch counter
-        # td                            list      - shuffled data at fiducial, lower and upper parameter values
-        # t                             array     - reshaped single combination of data at fiducial parameter value
-        # t_m                           array     - more reshaped single combination of data below fiducial parameter value
-        # t_p                           array     - more reshaped single combination of data above fiducial parameter value
-        #______________________________________________________________
-        n_train = utils.utils().positive_integer(n_train, key = 'number of combinations (n_train)')
-        num_epochs = utils.utils().positive_integer(num_epochs, key = 'number of epochs')
-        keep_rate = utils.utils().constrained_float(keep_rate, key = 'dropout')
-
-        train_F = []
-        central_indices = np.arange(n.n_s * n_train)
-        derivative_indices = np.arange(n.n_p * n_train)
-        if n.test_F is not None:
+        if n.x_central.op.type != 'Placeholder':
+            data = n.preload_data
+        if 'x_central_test' in data.keys():
             test = True
             test_F = []
         else:
             test = False
+
+        central_indices = np.arange(n.n_s * n_train)
+        derivative_indices = np.arange(n.n_p * n_train)
         tq = tqdm.trange(num_epochs)
         for epoch in tq:
             np.random.shuffle(central_indices)
             np.random.shuffle(derivative_indices)
-            for combination in range(n_train):
-                n.sess.run(n.backpropagate, feed_dict = {n.central_indices: central_indices[combination * n.n_s: (combination + 1) * n.n_s].reshape((n.n_s, 1)), n.derivative_indices: derivative_indices[combination * n.n_p: (combination + 1) * n.n_p].reshape((n.n_p, 1)), n.dropout: keep_rate, n.dd: der_den})
-            train_F.append(np.linalg.det(n.sess.run(n.F, feed_dict = {n.central_indices: central_indices[combination * n.n_s: (combination + 1) * n.n_s].reshape((n.n_s, 1)), n.derivative_indices: derivative_indices[combination * n.n_p: (combination + 1) * n.n_p].reshape((n.n_p, 1)), n.dropout: 1., n.dd: der_den})))
-            if test:
-                 test_F.append(np.linalg.det(n.sess.run(n.test_F, feed_dict = {n.dd: der_den})))
-                 tq.set_postfix(detF = train_F[-1], detF_test = test_F[-1])
+            if n.x_central.op.type != 'Placeholder':
+                for combination in range(n_train):
+                    n.sess.run(n.backpropagate, feed_dict = {n.central_indices: central_indices[combination * n.n_s: (combination + 1) * n.n_s].reshape((n.n_s, 1)), n.derivative_indices: derivative_indices[combination * n.n_p: (combination + 1) * n.n_p].reshape((n.n_p, 1)), n.dropout: keep_rate, n.dd: der_den})
+                train_F.append(np.linalg.det(n.sess.run(n.F, feed_dict = {n.central_indices: central_indices[combination * n.n_s: (combination + 1) * n.n_s].reshape((n.n_s, 1)), n.derivative_indices: derivative_indices[combination * n.n_p: (combination + 1) * n.n_p].reshape((n.n_p, 1)), n.dropout: 1., n.dd: der_den})))
             else:
-                 tq.set_postfix(detF = train_F[-1])
+                for combination in range(n_train):
+                    n.sess.run(n.backpropagate, feed_dict = {n.x_central: data['x_central'][central_indices[combination * n.n_s: (combination + 1) * n.n_s]], n.x_m: data['x_m'][derivative_indices[combination * n.n_p: (combination + 1) * n.n_p]], n.x_p: data['x_p'][derivative_indices[combination * n.n_p: (combination + 1) * n.n_p]], n.dropout: keep_rate, n.dd: der_den})
+                train_F.append(np.linalg.det(n.sess.run(n.F, feed_dict = {n.x_central: data['x_central'][central_indices[combination * n.n_s: (combination + 1) * n.n_s]], n.x_m: data['x_m'][derivative_indices[combination * n.n_p: (combination + 1) * n.n_p]], n.x_p: data['x_p'][derivative_indices[combination * n.n_p: (combination + 1) * n.n_p]], n.dropout: 1., n.dd: der_den})))
+            if test:
+                if n.x_central.op.type != 'Placeholder':
+                    test_F.append(np.linalg.det(n.sess.run(n.test_F, feed_dict = {n.dd: der_den})))
+                else:
+                    test_F.append(np.linalg.det(n.sess.run(n.test_F, feed_dict = {n.x_central: data['x_central_test'], n.x_m: data['x_m_test'], n.x_p: data['x_p_test'], n.dropout: 1., n.dd: der_den})))
+                tq.set_postfix(detF = train_F[-1], detF_test = test_F[-1])
+            else:
+                tq.set_postfix(detF = train_F[-1])
         if n.save_file is not None:
             n.save_network()
         if test:
