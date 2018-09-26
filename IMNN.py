@@ -36,7 +36,7 @@ class IMNN():
         # n_s                         n int       - total number of simulations
         # n_params                    n int       - number of parameters in the model
         # n_p                         n int       - number of differentiation simulations
-        # preload_data                n dict/None - training data to be preloaded to GPU
+        # preload_data                n dict/None - training data to be preloaded to TensorFlow constant
         # n_summaries                 n int       - number of outputs from the network
         # prebuild                    n bool      - True to allow IMNN to build the network
         # save_file                   n str/None  - Name to save or load graph. None does not save graph
@@ -130,6 +130,7 @@ class IMNN():
         # save_file                   n str/None  - name of the file to reload (ending in .meta)
         #______________________________________________________________
         # VARIABLES
+        # save_file                     str/None  - Name to save or load graph. None does not save graph
         # saver                       n tf op     - saving operation from tensorflow
         #______________________________________________________________
         if (n.save_file is None and file_name is not None):
@@ -525,28 +526,52 @@ class IMNN():
         # η                             float     - learning rate
         # network              optional func      - externally provided function for building network
         # inputs                      n int/list  - number of inputs (int) or shape of input (list)
-        # n_batch                     n int       - number of simulations per combination
-        # n_p_batch                   n int       - number of derivative simulations per combination
+        # preload_data                n dict/None - training data to be preloaded to TensorFlow constant
+        # n_s                         n int       - total number of simulations
         # n_params                    n int       - number of parameters in the model
+        # n_p                         n int       - number of differentiation simulations
         # prebuild                    n bool      - True to allow IMNN to build the network
         # verbose                     n bool      - True to print outputs such as shape of tensors
         # get_MLE                     n bool      - True to calculate MLE
         #______________________________________________________________
         # VARIABLES
         # x                           n tensor    - fiducial simulation input tensor
-        # x_real                      n tensor    - extra feedforward input tensor for calculating MLE
+        # central_indices             n tensor    - list of indices to select preloaded central data at
+        # derivative_indices          n tensor    - list of indices to select preloaded derivative data at
+        # x_central                   n tensor    - input tensor for fiducial simulations
+        # central_input                 tensor    - fiducial simulations to feed through network to calculate fisher
+        # x_m                         n tensor    - below fiducial simulation input tensor
+        # derivative_input_m            tensor    - lower simulations to feed through network to calculate fisher
+        # x_p                         n tensor    - above fiducial simulation input tensor
+        # derivative_input_m            tensor    - above simulations to feed through network to calculate fisher
+        # test_input                    tensor    - test simulations to feed through network to calculate fisher
+        # test_derivative_input_p       tensor    - lower test simulations to feed through network to calculate fisher
+        # test_derivative_input_p       tensor    - above test simulations to feed through network to calculate fisher
         # θ_fid                       n tensor    - fiducial parameter input tensor for calculating MLE
         # prior                       n tensor    - prior range for each parameter for calculating MLE
-        # x_m                         n tensor    - below fiducial simulation input tensor
-        # x_p                         n tensor    - above fiducial simulation input tensor
         # dd                          n tensor    - inverse difference between upper and lower parameter value
         # dropout                     n tensor    - keep rate for dropout layer
         # output                        tensor    - network output for simulations at fiducial parameter value
         # output                      n tensor    - network output for simulations at fiducial parameter value (named)
-        # output_m                      tensor    - network output for simulations below fiducial parameter value
-        # output_p                      tensor    - network output for simulations above fiducial parameter value
-        # output_real                   tensor    - IMNN summary of real data
-        # F                           n tensor    - Fisher information matrix
+        # output_central                tensor    - network output for simulations at fiducial parameter value to calculate fisher
+        # output_m                      tensor    - network output for simulations below fiducial parameter value to calculate fisher
+        # output_p                      tensor    - network output for simulations above fiducial parameter value to calculate fisher
+        # test_output_central           tensor    - network output for test simulations at fiducial parameter value to calculate fisher
+        # test_output_m                 tensor    - network output for test simulations below fiducial parameter value to calculate fisher
+        # test_output_p                 tensor    - network output for test simulations above fiducial parameter value to calculate fisher
+        # F                             tensor    - Fisher information matrix
+        # F                           n tensor    - Fisher information matrix (named)
+        # _                                       - ignored placeholder variable
+        # test_F                        tensor    - Fisher information matrix from test simulations
+        # iC                            tensor    - inverse covariance of network outputs for fiducial test simulations
+        # μ                             tensor    - mean of network outputs for fiducial test simulations (named)
+        # dμdθ                          tensor    - numerical derivative of the mean of network outputs (named)
+        # C                             tensor    - covariance of network outputs for fiducial test simulations (named)
+        # test_F                      n tensor    - Fisher information matrix from test simulations (named)
+        # iC                          n tensor    - inverse covariance of network outputs for fiducial test simulations (named)
+        # μ                           n tensor    - mean of network outputs for fiducial test simulations (named)
+        # dμdθ                        n tensor    - numerical derivative of the mean of network outputs (named)
+        # C                           n tensor    - covariance of network outputs for fiducial test simulations (named)
         # MLE                         n tensor    - MLE of parameters
         # AL                          n tensor    - asymptotic likelihood at range of parameter values
         #______________________________________________________________
@@ -651,41 +676,43 @@ class IMNN():
         # determinant of Fisher information matrix at the end of each epoch for train data (and test data)
         #______________________________________________________________
         # FUNCTIONS (DEFINED IN IMNN.py)
-        # shuffle(list)                 list      - shuffles the simulations on each epoch
         # save_network(optional Bool)             - saves the network (if n.save_file is not None)
         #______________________________________________________________
         # FUNCTIONS (DEFINED IN utils.py)
-        # check_data(class, list, int, optional bool)
-        #                               bool      - checks whether data is of correct format (and whether to use test data)
         # positive_integer(list)        int       - checks that parameter is a positive integer
         # constrained_float(float, string)
         #                               float     - checks the dropout is between 0 and 1
         #______________________________________________________________
         # INPUTS
-        # train_data                    list      - data at fiducial, lower and upper parameter values
         # num_epochs                    int       - number of epochs to train
         # n_train                       int       - number of combinations to split training set into
         # keep_rate                     float     - keep rate for dropout
         # der_den                       array     - inverse difference between upper and lower parameter values
-        # test_data            optional list      - data at fiducial, lower and upper parameter values for testing
+        # data                          dict      - data at fiducial, lower and upper parameter values (with test versions)
         # sess                        n session   - interactive tensorflow session (with initialised parameters)
         # backpropagate               n tf opt    - minimisation scheme for the network
-        # x                           n tensor    - fiducial simulation input tensor
+        # n_s                         n int       - total number of simulations
+        # n_p                         n int       - number of differentiation simulations
+        # x_central                   n tensor    - fiducial simulation input tensor
+        # central_indices             n tensor    - list of indices to select preloaded central data at
+        # derivative_indices          n tensor    - list of indices to select preloaded derivative data at
         # x_m                         n tensor    - below fiducial simulation input tensor
         # x_p                         n tensor    - above fiducial simulation input tensor
         # dropout                     n tensor    - keep rate for dropout layer
         # dd                          n tensor    - inverse difference between upper and lower parameter value
         # F                           n tensor    - Fisher information matrix
+        # test_F                      n tensor    - Fisher information matrix from test simulations
+        # save_file                   n str/None  - Name to save or load graph. None does not save graph
         #______________________________________________________________
         # VARIABLES
-        # do_test                       bool      - True if using test_data
+        # test                          bool      - True if using test_data
         # train_F                       list      - determinant Fisher information matrix at end of train epoch
         # test_F                        list      - determinant Fisher information matrix of test data at end of epoch
+        # tq                            tqdm loop - a looper in tqdm for showing the progress bar
         # epoch                         int       - epoch counter
-        # td                            list      - shuffled data at fiducial, lower and upper parameter values
-        # t                             array     - reshaped single combination of data at fiducial parameter value
-        # t_m                           array     - more reshaped single combination of data below fiducial parameter value
-        # t_p                           array     - more reshaped single combination of data above fiducial parameter value
+        # central_indices               array     - list of indices at which to select the central data for training
+        # derivative_indices            array     - list of indices at which to select the derivative data for training
+        # combination                   int       - counter for number of individual combinations of simulations
         #______________________________________________________________
         num_epochs = utils.utils().positive_integer(num_epochs, key = 'number of epochs')
         n_train = utils.utils().positive_integer(n_train, key = 'number of combinations')
@@ -733,8 +760,8 @@ class IMNN():
         # PERFORM APPROXIMATE BAYESIAN COMPUTATION WITH RANDOM DRAWS FROM PRIOR
         #______________________________________________________________
         # CALLED FROM
-        # PMC(array, array, list, int, int, func, float, optional bool, optional list)
-        #                               array, float, array, array, array, int
+        # PMC(array, list, int, int, func, float, optional bool, optional list, optional array)
+        #                               array, float, array, array, array, int, array
         #                                         - performs population monte carlo
         #______________________________________________________________
         # RETURNS
@@ -744,19 +771,26 @@ class IMNN():
         #______________________________________________________________
         # INPUTS
         # real_data                     array     - real data to be summarised
-        # estimation_simulations        list      - list of central, lower and upper simulations to calculate Fisher information
         # der_den                       array     - denominator to calculate the numerical derivative
         # prior                         list      - lower and upper bound of uniform prior
         # draws                         int       - number of draws from the prior
         # generate_simulation           func      - function which generates the simulation at parameter value
         # at_once              optional bool      - True if generate all simulations and calculate all summaries at once
+        # data                 optional dict      - dictionary containing test data
         # sess                        n session   - interactive tensorflow session (with initialised parameters)
-        # output                      n tensor    - network output for simulations at fiducial parameter value
+        # test_F                      n tensor    - Fisher information matrix
         # x                           n tensor    - fiducial simulation input tensor
+        # test_F                      n tensor    - Fisher information from test data
+        # x_central                   n tensor    - input tensor for fiducial simulations
+        # x_m                         n tensor    - below fiducial simulation input tensor
+        # x_p                         n tensor    - above fiducial simulation input tensor
+        # dd                          n tensor    - inverse difference between upper and lower parameter value
         # dropout                     n tensor    - keep rate for dropout layer
+        # output                      n tensor    - network output for simulations at fiducial parameter value
+        # n_summaries                 n int       - number of outputs from the network
         #______________________________________________________________
         # VARIABLES
-        # F                             array     - Fisher information matrix of a group of simulations
+        # F                             array     - Fisher information matrix from test simulations
         # summary                       float     - summary of the real data
         # θ                             array     - all draws from prior
         # simulations                   array     - generated simulations at all parameter draws
@@ -764,7 +798,7 @@ class IMNN():
         # theta                         int       - counter for number of draws
         # simulation                    array     - generated simulation at indivdual parameter draw
         # difference                    array     - difference between summary of real data and summaries of simulations
-        # distance                      array     - Euclidean distance between real summary and summaries of simulations
+        # distances                     array     - Euclidean distance between real summary and summaries of simulations
         #______________________________________________________________
         if n.x_central.op.type != 'Placeholder':
             F = n.sess.run(n.test_F, feed_dict = {n.dd: der_den})
@@ -788,9 +822,9 @@ class IMNN():
         # PERFORM APPROXIMATE BAYESIAN COMPUTATION USING POPULATION MONTE CARLO
         #______________________________________________________________
         # RETURNS
-        # array, float, array, array, array, int
+        # array, float, array, array, array, int, array
         # sampled parameter values, network summary of real data, distances between simulation summaries and real summary,
-        #    summaries of simulations, weighting of samples, total number of draws so far
+        #    summaries of simulations, weighting of samples, total number of draws so far and Fisher information
         #______________________________________________________________
         # FUNCTIONS (DEFINED IN utils.py)
         # to_continue(list)             bool      - True if continue running PMC
@@ -799,7 +833,6 @@ class IMNN():
         #______________________________________________________________
         # INPUTS
         # real_data                     array     - real data to be summarised
-        # estimation_simulations        list      - list of central, lower and upper simulations to calculate Fisher information
         # der_den                       array     - denominator to calculate the numerical derivative
         # prior                         list      - lower and upper bound of uniform prior
         # num_draws                     int       - number of initial draws from the prior
@@ -808,10 +841,12 @@ class IMNN():
         # criterion                     float     - ratio of number of draws wanted over number of draws needed
         # at_once              optional bool      - True if generate all simulations and calculate all summaries at once
         # samples              optional list      - list of all the outputs of PMC to continue running PMC
+        # data                 optional dict      - dictionary containing test data
         # sess                        n session   - interactive tensorflow session (with initialised parameters)
         # output                      n tensor    - network output for simulations at fiducial parameter value
         # x                           n tensor    - fiducial simulation input tensor
         # dropout                     n tensor    - keep rate for dropout layer
+        # n_summaries                 n int       - number of outputs from the network
         #______________________________________________________________
         # VARIABLES
         # continue_from_samples         bool      - True is continue running the PMC
@@ -821,17 +856,18 @@ class IMNN():
         # s_                            array     - summaries from approximate posterior
         # W                             array     - weighting for samples in approximate posterior
         # total_draws                   int       - total number of draws from the prior so far
+        # F                             array     - Fisher information matrix of test simulations
         # θ                             array     - all parameter draws from prior
         # s                             float     - summaries of each of the generated simulations from prior
         # ρ                             array     - distance between real summary and summaries of simulations from prior
-        # F                             array     - Fisher information matrix of a group of simulations
+        # keep_index                    array     - sorted indices of closest compressed simulations to real data
         # pθ                            float     - value of prior at given θ value (for uniform prior)
         # iteration                     int       - counter for number of iterations of PMC
         # criterion_reached             float     - number of draws wanted over number of current draws
         # cov                           array     - weighted covariance of drawn samples
-        # W_temp                        array     - copy of sample weighting array for updating
         # ϵ                             float     - current accept distance
         # redraw_index                  array     - indices of parameter draws to redraw
+        # W_temp                        array     - copy of sample weighting array for updating
         # current_draws                 int       - number of parameters being updated at once
         # draws                         int       - counter for number of draws per iteration
         # θ_temp                        array     - proposed updated parameter sample values
@@ -909,12 +945,56 @@ class IMNN():
         return θ_, summary, ρ_, s_, W, total_draws, F
 
     def θ_MLE(n, real_data, θ_fid, der_den, data = None):
+        # CALCULATE MAXIMUM LIKELIHOOD ESTIMATE OF PARAMETERS
+        #______________________________________________________________
+        # RETURNS
+        # array
+        # Maximum likelihood estimate of parameters
+        #______________________________________________________________
+        # INPUTS
+        # real_data                     array     - real data to be summarised
+        # der_den                       array     - denominator to calculate the numerical derivative
+        # θ_fid                         array     - fiducial parameter values
+        # data                 optional dict      - dictionary containing test data
+        # sess                        n session   - interactive tensorflow session (with initialised parameters)
+        # x                           n tensor    - fiducial simulation input tensor
+        # θ_fid                       n tensor    - fiducial parameter input tensor for calculation MLE
+        # x_central                   n tensor    - input tensor for fiducial simulations
+        # x_m                         n tensor    - below fiducial simulation input tensor
+        # x_p                         n tensor    - above fiducial simulation input tensor
+        # dd                          n tensor    - inverse difference between upper and lower parameter value
+        # dropout                     n tensor    - keep rate for dropout layer
+        # MLE                         n tensor    - MLE of parameters
+        #______________________________________________________________
         if n.x_central.op.type != 'Placeholder':
             return n.sess.run(n.MLE, feed_dict = {n.x: real_data, n.θ_fid: θ_fid, n.dropout: 1., n.dd: der_den})
         else:
             return n.sess.run(n.MLE, feed_dict = {n.x: real_data, n.x_central: data['x_central_test'], n.x_m: data['x_m_test'], n.x_p: data['x_p_test'], n.θ_fid: θ_fid, n.dropout: 1., n.dd: der_den})
 
     def asymptotic_likelihood(n, real_data, θ_fid, prior, der_den, data = None):
+        # CALCULATE ASYMPTOTIC LIKELIHOOD OVER PARAMETER RANGE
+        #______________________________________________________________
+        # RETURNS
+        # array
+        # Asymptotic likelihood over a parameter range
+        #______________________________________________________________
+        # INPUTS
+        # real_data                     array     - real data to be summarised
+        # der_den                       array     - denominator to calculate the numerical derivative
+        # θ_fid                         array     - fiducial parameter values
+        # prior                         array     - range of parameter values to calculate asymptotic likelihood at
+        # data                 optional dict      - dictionary containing test data
+        # sess                        n session   - interactive tensorflow session (with initialised parameters)
+        # x                           n tensor    - fiducial simulation input tensor
+        # θ_fid                       n tensor    - fiducial parameter input tensor for calculation MLE
+        # prior                       n tensor    - prior range for each parameter for calculating MLE
+        # x_central                   n tensor    - input tensor for fiducial simulations
+        # x_m                         n tensor    - below fiducial simulation input tensor
+        # x_p                         n tensor    - above fiducial simulation input tensor
+        # dd                          n tensor    - inverse difference between upper and lower parameter value
+        # dropout                     n tensor    - keep rate for dropout layer
+        # AL                          n tensor    - asymptotic likelihood at range of parameter values
+        #______________________________________________________________
         if n.x_central.op.type != 'Placeholder':
             return n.sess.run(n.AL, feed_dict = {n.x: real_data, n.θ_fid: θ_fid, n.prior: prior, n.dropout: 1., n.dd: der_den})
         else:

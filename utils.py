@@ -17,13 +17,16 @@ class utils():
         #   differentiation fraction    int       - fraction of the total number of simulations to use for derivative
         #   prebuild                    bool      - True to allow IMNN to build the network
         #   number of summaries         int       - number of outputs from the network
-        #   input shape                 int/list  - number of inputs (int) or shape of input (list)
+        #   input shape                 list      - number of inputs (int) or shape of input (list)
+        #   calculate MLE               bool      - True to calculate the maximum likelihood estimate
+        #   preload data                dict/None - data to preload as a TensorFlow constant
+        #   save file                   str/None  - path and file name to save (or load) data
         #______________________________________________________________
         # VARIABLES
         # necessary_parameters          list      - list of necessary parameters
         # key                           str       - key value to check
         #______________________________________________________________
-        necessary_parameters = ['verbose', 'number of simulations', 'number of parameters', 'differentiation fraction', 'prebuild', 'input shape', 'number of summaries']
+        necessary_parameters = ['verbose', 'number of simulations', 'number of parameters', 'differentiation fraction', 'prebuild', 'input shape', 'number of summaries', 'calculate MLE', 'preload data', 'save file']
         for key in necessary_parameters:
             if key not in params.keys():
                 print(key + ' not found in parameter dictionary.')
@@ -639,51 +642,6 @@ class utils():
         if network is None:
             print('network architecture needs to be prebuilt')
             sys.exit()
-
-    def check_data(u, n, data, size, test = False):
-        # CHECKS DATA IS CORRECT SHAPE AND WHETHER TEST DATA IS USED
-        #______________________________________________________________
-        # CALLED FROM (DEFINED IN IMNN.py)
-        # train(list, int, int, int, float, array, optional list)
-        #                              list/list, list
-        #                                         - trains the information maximising neural network
-        #______________________________________________________________
-        # RETURNS
-        # bool
-        # True if test_data is correct shape to use for testing
-        #______________________________________________________________
-        # INPUTS
-        # data                          list      - simulations to use for training or testing the network
-        # size                          int       - number of combinations of data to use
-        # test                 optional bool      - True if checking test data
-        # n_s                         n int       - number of simulations to use
-        #______________________________________________________________
-        if test:
-            key = 'test data'
-            if data is None:
-                return False
-        else:
-            key = 'training data'
-        if type(data) != list:
-            print(key + ' is not a list. provided ' + key + ' is ' + str(type(data)) + '.')
-            sys.exit()
-        if len(data) != 3:
-            print(key + ' needs to be a list with element 1 the fiducial data, element 2 the lower parameter simulations and element 3 the upper parameter simulations. current list length is ' + str(len(data)) + '.')
-            sys.exit()
-        for i in range(3):
-            if type(data[i]) != np.ndarray:
-                print('element ' + str(i) + ' of ' + key + ' must be a numpy array. current type is ' + str(type(data[i])) + '.')
-                sys.exit()
-            if i == 0:
-                if data[i].shape != tuple([size * n.n_s] + n.inputs):
-                    print('element 0 of ' + key + ' must have the shape ' + str(tuple([size * n.n_s] + n.inputs)) + ', but currently has the shape ' + str(data[i].shape) + '.')
-                    sys.exit()
-            else:
-                if data[i].shape != tuple([size * n.n_p, n.n_params] + n.inputs):
-                    print('element ' + str(i) + ' of ' + key + ' must have the shape ' + str(tuple([size * n.n_p, n.n_params] + n.inputs)) + ', but currently has the shape ' + str(data[i].shape) + '.')
-                    sys.exit()
-        if test:
-            return True
 
     def to_continue(u, samples):
         # CHECKS LIST OF NECESSARY PMC COMPONENTS TO SEE WHETHER PMC CAN CONTINUE
