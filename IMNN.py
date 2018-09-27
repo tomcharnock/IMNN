@@ -494,7 +494,7 @@ class IMNN():
         # iF                            tensor    - inverse Fisher information matrix from fiducial simulations
         #______________________________________________________________
         iF = tf.matrix_inverse(n.test_F)
-        return tf.expand_dims(n.θ_fid, 0) + tf.einsum("ij,kj->ki", iF, tf.einsum("ij,kj->ki", n.iC, tf.einsum("ij,kj->kj", n.dμdθ, n.output - tf.expand_dims(n.μ, 0))))
+        return tf.expand_dims(n.θ_fid, 0) + tf.einsum("ij,kj->ki", iF, tf.einsum("ij,kj->ki", tf.einsum("ij,kj->ki", n.iC, n.dμdθ), n.output - tf.expand_dims(n.μ, 0)))
 
     def loss(n, F):
         # CALCULATE THE LOSS FUNCTION
