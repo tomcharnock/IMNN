@@ -137,7 +137,7 @@ derivative_denominator = 1. / (2. * Δθpm)
 der_den = np.array([derivative_denominator])
 ```
 
-The fiducial simulations and simulations for the derivative must be collected in a dictionary to be stored as a TensorFlow constant or passed to the train function.
+The fiducial simulations and simulations for the derivative must be collected in a dictionary to be stored on the GPU or passed to the training function.
 
 
 ```python
@@ -233,7 +233,9 @@ The network works with a base set of parameters which are<br>
 
 > `'differentiation fraction'` - `float` - a fraction of the simulations to use for the numerical derivative
 
-> `'number of parameters'` - `int` - number of parameters in a model
+> `'fiducial θ'` - `array` - fiducial parameters in an array
+
+> `'derivative denominator'` - `array` - denominator of the numerical derivative for each parameter
 
 > `'number of summaries'` - `int` - number of summaries the network makes from the data
 
@@ -252,7 +254,8 @@ parameters = {
     'verbose': True,
     'number of simulations': n_s,
     'differentiation fraction': derivative_fraction,
-    'number of parameters': 1,
+    'fiducial θ': np.array([θ_fid]),
+    'derivative denominator': der_den,
     'number of summaries': 1,
     'input shape': input_shape,
     'preload data': data,
@@ -278,7 +281,8 @@ Here is an example of the IMNN which uses 1000 simulations per combination and 5
 parameters = {
     'verbose': True,
     'number of simulations': n_s,
-    'number of parameters': 1,
+    'fiducial θ': np.array([θ_fid]),
+    'derivative denominator': der_den,
     'differentiation fraction': derivative_fraction,
     'number of summaries': 1,
     'calculate MLE': True,
@@ -410,7 +414,7 @@ n.setup(η = η)
     Tensor("IMNN_1/layer_4_5/LeakyRelu:0", shape=(50, 100), dtype=float32)
     Tensor("IMNN_1/layer_5_5/LeakyRelu:0", shape=(50, 1), dtype=float32)
     Tensor("central_output:0", shape=(1000, 1), dtype=float32)
-    Tensor("central_mean:0", shape=(1, 1), dtype=float32)
+    Tensor("central_mean:0", shape=(1,), dtype=float32)
     Tensor("central_difference_from_mean:0", shape=(1000, 1), dtype=float32)
     Tensor("central_covariance:0", shape=(1, 1), dtype=float32)
     Tensor("inverse_central_covariance:0", shape=(1, 1), dtype=float32)
@@ -418,7 +422,7 @@ n.setup(η = η)
     Tensor("upper_output:0", shape=(50, 1, 1), dtype=float32)
     Tensor("upper_lower_mean_derivative:0", shape=(1, 1), dtype=float32)
     Tensor("central_output_1:0", shape=(1000, 1), dtype=float32)
-    Tensor("central_mean_1:0", shape=(1, 1), dtype=float32)
+    Tensor("central_mean_1:0", shape=(1,), dtype=float32)
     Tensor("central_difference_from_mean_1:0", shape=(1000, 1), dtype=float32)
     Tensor("central_covariance_1:0", shape=(1, 1), dtype=float32)
     Tensor("inverse_central_covariance_1:0", shape=(1, 1), dtype=float32)
@@ -456,16 +460,16 @@ keep_rate = 0.8
 
 If the data has not been preloaded as a TensorFlow constant then it can be passed to the train function
 ```python
-train_F, test_F = n.train(num_epochs = num_epochs, n_train = n_train, keep_rate = keep_rate, der_den = der_den, data = data)
+train_F, test_F = n.train(num_epochs = num_epochs, n_train = n_train, keep_rate = keep_rate, data = data)
 ```
 We can run
 
 
 ```python
-train_F, test_F = n.train(num_epochs = num_epochs, n_train = n_train, keep_rate = keep_rate, der_den = der_den)
+train_F, test_F = n.train(num_epochs = num_epochs, n_train = n_train, keep_rate = keep_rate)
 ```
 
-    100%|██████████| 1000/1000 [02:30<00:00,  6.63it/s, detF=77.8, detF_test=46.9]
+    100%|██████████| 1000/1000 [02:38<00:00,  6.33it/s, detF=81.4, detF_test=38.3]
 
     saving the graph as data/saved_model.meta
 
@@ -558,18 +562,18 @@ Because the simulations are created within the ABC function then the generation 
 
 If the data is not preloaded as a TensorFlow constant then the data can be passed to the function as
 ```python
-θ, summary, s, ρ, F = n.ABC(real_data = real_data, der_den = der_den, prior = [0, 10], draws = 100000, generate_simulation = generate_data, at_once = True, data = data)
+θ, summary, s, ρ, F = n.ABC(real_data = real_data, prior = [0, 10], draws = 100000, generate_simulation = generate_data, at_once = True, data = data)
 ```
 Here we can use
 
 
 ```python
-θ, summary, s, ρ, F = n.ABC(real_data = real_data, der_den = der_den, prior = [0, 10], draws = 100000, generate_simulation = generate_data, at_once = True)
+θ, summary, s, ρ, F = n.ABC(real_data = real_data, prior = [0, 10], draws = 100000, generate_simulation = generate_data, at_once = True)
 ```
 
 If the simulations are going to be too large to make all at once the `at_once` option can be set to false which will create one simulation at a time.
 ```python
-θ, summary, s, ρ, F = n.ABC(real_data = real_data, der_den = der_den, prior = [0, 10], draws = 100000, generate_simulation = generate_data, at_once = False)
+θ, summary, s, ρ, F = n.ABC(real_data = real_data, prior = [0, 10], draws = 100000, generate_simulation = generate_data, at_once = False)
 ```
 
 ### Accept or reject
@@ -611,19 +615,19 @@ Population Monte Carlo ABC is a way of reducing the number of draws by first sam
 
 If the data is not preloaded as a TensorFlow constant then the data can be passed to the function as
 ```python
-θ_, summary_, ρ_, s_, W, total_draws, F = n.PMC(real_data = real_data, der_den = der_den, prior = [0, 10], num_draws = 1000, num_keep = 1000, generate_simulation = generate_data, criterion = 0.1, data = data, at_once = True, samples = None)```
+θ_, summary_, ρ_, s_, W, total_draws, F = n.PMC(real_data = real_data, prior = [0, 10], num_draws = 1000, num_keep = 1000, generate_simulation = generate_data, criterion = 0.1, data = data, at_once = True, samples = None)```
 Here we can use
 
 
 ```python
-θ_, summary_, ρ_, s_, W, total_draws, F = n.PMC(real_data = real_data, der_den = der_den, prior = [0, 10], num_draws = 1000, num_keep = 1000, generate_simulation = generate_data, criterion = 0.1, at_once = True, samples = None)
+θ_, summary_, ρ_, s_, W, total_draws, F = n.PMC(real_data = real_data, prior = [0, 10], num_draws = 1000, num_keep = 1000, generate_simulation = generate_data, criterion = 0.1, at_once = True, samples = None)
 ```
 
-    iteration = 28, current criterion = 0.09058791557206268, total draws = 59021, ϵ = 68.04384803771973..
+    iteration = 26, current criterion = 0.08313934153641503, total draws = 66719, ϵ = 40.427178382873535.
 
 If we want the PMC to continue for longer we can provide the output of PMC as an input as
 ```python
-θ_, summary_, ρ_, s_, W, total_draws, F = n.PMC(real_data = real_data, der_den = der_den, prior = [0, 10], num_draws = 1000, num_keep = 1000, generate_simulation = generate_data, criterion = 0.01, data = data, at_once = True, samples = [θ_, summary_, ρ_, s_, W, total_draws, F])```
+θ_, summary_, ρ_, s_, W, total_draws, F = n.PMC(real_data = real_data, prior = [0, 10], num_draws = 1000, num_keep = 1000, generate_simulation = generate_data, criterion = 0.01, data = data, at_once = True, samples = [θ_, summary_, ρ_, s_, W, total_draws, F])```
 
 Finally we can plot the accepted samples and plot their histogram.
 
@@ -652,16 +656,16 @@ We can also calculate the first-order Gaussian approximation of the posterior on
 
 If the data is not preloaded as a TensorFlow constant then it can be passed using
 ```python
-    asymptotic_likelihood = n.asymptotic_likelihood(real_data = real_data, θ_fid = np.array([θ_fid]).reshape((1, 1)), prior = np.linspace(0, 10, 1000).reshape((1, 1, 1000)), der_den = der_den, data = data)
-MLE = n.θ_MLE(real_data = real_data, θ_fid = np.array([θ_fid]).reshape((1, 1)), der_den = der_den, data = data)
+    asymptotic_likelihood = n.asymptotic_likelihood(real_data = real_data, prior = np.linspace(0, 10, 1000).reshape((1, 1, 1000)), data = data)
+MLE = n.θ_MLE(real_data = real_data, data = data)
 ```
 
 Here we will use
 
 
 ```python
-asymptotic_likelihood = n.asymptotic_likelihood(real_data = real_data, θ_fid = np.array([θ_fid]).reshape((1, 1)), prior = np.linspace(0, 10, 1000).reshape((1, 1, 1000)), der_den = der_den, data = data)
-MLE = n.θ_MLE(real_data = real_data, θ_fid = np.array([θ_fid]).reshape((1, 1)), der_den = der_den)
+asymptotic_likelihood = n.asymptotic_likelihood(real_data = real_data, prior = np.linspace(0, 10, 1000).reshape((1, 1, 1000)))
+MLE = n.θ_MLE(real_data = real_data)
 ```
 
 
