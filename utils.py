@@ -26,7 +26,7 @@ class utils():
         # necessary_parameters          list      - list of necessary parameters
         # key                           str       - key value to check
         #______________________________________________________________
-        necessary_parameters = ['verbose', 'number of simulations', 'number of parameters', 'differentiation fraction', 'prebuild', 'input shape', 'number of summaries', 'calculate MLE', 'preload data', 'save file']
+        necessary_parameters = ['verbose', 'number of simulations', 'fiducial θ', 'derivative denominator', 'differentiation fraction', 'prebuild', 'input shape', 'number of summaries', 'calculate MLE', 'preload data', 'save file']
         for key in necessary_parameters:
             if key not in params.keys():
                 print(key + ' not found in parameter dictionary.')
@@ -375,7 +375,7 @@ class utils():
         # inputs                       list       - list form of n.inputs for checking shape
         #______________________________________________________________
         if params['preload data'] is None:
-            print("Not preloading data to GPU")
+            print("Not preloading data as TensorFlow constant")
             return None
         else:
             if type(params['preload data']) != dict:
@@ -395,6 +395,51 @@ class utils():
                     print("The upper values of the training data must have the same shape as the input (" + str([n.n_params] + inputs) + "), but has shape " + str(params['preload data']['x_p'].shape[1:]))
                     sys.exit()
         return params['preload data']
+
+    def check_fiducial(u, params):
+        # CHECKS FIDUCIAL PARAMETERS ARE IN AN ARRAY
+        #______________________________________________________________
+        # RETURNS
+        # array, int
+        # returns the fiducial parameters and the number of parameters
+        #______________________________________________________________
+        # INPUTS
+        # params                       dict       - dictionary of parameters
+        #______________________________________________________________
+        # VARIABLES
+        # value                        array      - array containing the fiducial parameter values
+        #______________________________________________________________
+        value = params['fiducial θ']
+        if type(value) != np.ndarray:
+            print("fiducial θ must be an 1D array containing the fiducial parameter values. current type is " + str(type(value)))
+            sys.exit()
+        if len(value.shape) > 1:
+            print("fiducial θ must be an 1D array containing the fiducial parameter values. the current shape is " + str(value.shape))
+            sys.exit()
+        return value, value.shape[0]
+
+    def check_derivative(u, params, n):
+        # CHECKS DERIVATIVE DENOMINATORS ARE IN AN ARRAY
+        #______________________________________________________________
+        # RETURNS
+        # array
+        # returns the denominator for the numerical derivative
+        #______________________________________________________________
+        # INPUTS
+        # params                       dict       - dictionary of parameters
+        # fiducial_θ                 n array      - array of fiducial parameters
+        #______________________________________________________________
+        # VARIABLES
+        # value                        array      - array containing the fiducial parameter values
+        #______________________________________________________________
+        value = params['derivative denominator']
+        if type(value) != np.ndarray:
+            print("derivative denominator must be an 1D array containing the derivative denominator for each parameter. current type is " + str(type(value)))
+            sys.exit()
+        if value.shape != n.fiducial_θ.shape:
+            print("derivative denominator must have the same shape as fiducial θ. the current shape is " + str(value.shape) + " and the shape of fiducial θ is " + str(n.fiducial_θ.shape))
+            sys.exit()
+        return value
 
     def check_save_file(u, value, optional = '', key = ''):
         # CHECKS FOR BOOLEAN INPUT
