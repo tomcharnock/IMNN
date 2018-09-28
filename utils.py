@@ -380,6 +380,7 @@ class utils():
         else:
             if type(params['preload data']) != dict:
                 print("preload data must be a dictionary containing the central values and the derivatives for training but instead is type" + str(type(params["preload data"])))
+                sys.exit()
             else:
                 if params['preload data']['x_central'].shape[1:] != tuple(n.inputs):
                     print("The central values of the training data must have the same shape as the input (" + str(n.inputs) + "), but has shape " + str(params['preload data']['x_central'].shape[1:]))
