@@ -421,6 +421,7 @@ n.setup(η = η)
     Tensor("lower_output:0", shape=(50, 1, 1), dtype=float32)
     Tensor("upper_output:0", shape=(50, 1, 1), dtype=float32)
     Tensor("upper_lower_mean_derivative:0", shape=(1, 1), dtype=float32)
+    Tensor("fisher_information:0", shape=(1, 1), dtype=float32)
     Tensor("central_output_1:0", shape=(1000, 1), dtype=float32)
     Tensor("central_mean_1:0", shape=(1,), dtype=float32)
     Tensor("central_difference_from_mean_1:0", shape=(1000, 1), dtype=float32)
@@ -429,7 +430,6 @@ n.setup(η = η)
     Tensor("lower_output_1:0", shape=(50, 1, 1), dtype=float32)
     Tensor("upper_output_1:0", shape=(50, 1, 1), dtype=float32)
     Tensor("upper_lower_mean_derivative_1:0", shape=(1, 1), dtype=float32)
-    Tensor("fisher_information:0", shape=(1, 1), dtype=float32)
     Tensor("maximum_likelihood_estimate:0", shape=(?, 1), dtype=float32)
     Tensor("asymptotic_likelihood:0", shape=(?, 1, 1000), dtype=float32)
     saving the graph as data/saved_model.meta
@@ -466,10 +466,10 @@ We can run
 
 
 ```python
-train_F, test_F = n.train(num_epochs = num_epochs, n_train = n_train, keep_rate = keep_rate)
+n.train(num_epochs = num_epochs, n_train = n_train, keep_rate = keep_rate, history = True)
 ```
 
-    100%|██████████| 1000/1000 [02:38<00:00,  6.33it/s, detF=81.4, detF_test=38.3]
+    100%|██████████| 1000/1000 [04:16<00:00,  3.90it/s, detF=62.3, detF_test=34.4]
 
     saving the graph as data/saved_model.meta
 
@@ -477,31 +477,78 @@ train_F, test_F = n.train(num_epochs = num_epochs, n_train = n_train, keep_rate 
 
 
 
-The train function returns a list of the determinant of the Fisher matrix on the training data, and a second list for the test data if available.</br></br>
-The outputs from the train function can be plotted, along with the loss function which is simply
-$$\Lambda = -\frac{1}{2}|F|^2.$$
+The train function automatically collects a dictionary of history elements when `history = True`. When `history = False` the dictionary only contains
+
+> `'F'` - the Fisher information at each epoch
+
+> `'det(F)'` - the determinant of the Fisher information
+
+When `history = True` then the dictionary also contains
+
+> `'Λ'` - the loss function of the training data
+
+> `'μ'` - the mean of the fiducial simulations
+
+> `'C'` - the covariance of the fiducial simulations
+
+> `'det(C)'` - the determinant of the fiducial simulations
+
+> `'dμdθ'` - the mean of the numerical derivative of the simulations
+
+Test version of each of these quantities is also calculated if there is provided test data
+
+> `'test F'` - the Fisher information of the test data
+
+> `'det(test F)'` - the determinant of the Fisher information from the test data
+
+> `'test Λ'` - the loss function of the test data
+
+> `'test μ'` - the mean of the fiducial test simulations
+
+> `'test C'` - the covariance of the fiducial test simulations
+
+> `'det(test C)'` - the determinant of the fiducial test simulations
+
+> `'test dμdθ'` - the mean of the numerical derivative of the test simulations
 
 
 ```python
-train_F = np.array(train_F)
-test_F = np.array(test_F)
-fig, ax = plt.subplots(2, 1, sharex = True, figsize = (10, 14))
+fig, ax = plt.subplots(5, 1, sharex = True, figsize = (8, 14))
 plt.subplots_adjust(hspace = 0)
-end = len(train_F)
+end = len(n.history["det(F)"])
 epochs = np.arange(end)
-a, = ax[0].plot(epochs, -0.5 * train_F[:end]**2, label = 'Training data')
-b, = ax[0].plot(epochs, -0.5 * test_F[:end]**2, label = 'Test data')
+a, = ax[0].plot(epochs, n.history["det(F)"], label = 'Training data')
+b, = ax[0].plot(epochs, n.history["det(test F)"], label = 'Test data')
 ax[0].legend(frameon = False)
-ax[0].set_ylabel('Loss')
-ax[1].plot(epochs, train_F[:end])
-ax[1].plot(epochs, test_F[:end])
-ax[1].set_ylabel('$|\mathcal{F}|$')
+ax[0].set_ylabel(r'$|{\bf F}_{\alpha\beta}|$')
+ax[1].plot(epochs, n.history["Λ"])
+ax[1].plot(epochs, n.history["test Λ"])
 ax[1].set_xlabel('Number of epochs')
+ax[1].set_ylabel(r'$\Lambda$')
 ax[1].set_xlim([0, len(epochs)]);
+ax[2].plot(epochs, n.history["det(C)"])
+ax[2].plot(epochs, n.history["det(test C)"])
+ax[2].set_xlabel('Number of epochs')
+ax[2].set_ylabel(r'$|{\bf C}|$')
+ax[2].set_xlim([0, len(epochs)]);
+ax[3].plot(epochs, np.array(n.history["dμdθ"]).reshape((np.prod(np.array(n.history["dμdθ"]).shape))))
+ax[3].plot(epochs, np.array(n.history["test dμdθ"]).reshape((np.prod(np.array(n.history["test dμdθ"]).shape))))
+ax[3].set_ylabel(r'$\partial\mu/\partial\theta$')
+ax[3].set_xlabel('Number of epochs')
+ax[3].set_xlim([0, len(epochs)])
+ax[4].plot(epochs, np.array(n.history["μ"]).reshape((np.prod(np.array(n.history["μ"]).shape))))
+ax[4].plot(epochs, np.array(n.history["test μ"]).reshape((np.prod(np.array(n.history["test μ"]).shape))))
+ax[4].set_ylabel('μ')
+ax[4].set_xlabel('Number of epochs')
+ax[4].set_xlim([0, len(epochs)])
+print()
 ```
 
 
-![png](figures/output_45_0.png)
+
+
+
+![png](figures/output_45_1.png)
 
 
 We can see that the test loss deviates from the training loss. This is to be expected because there are will be a lot of correlation within a small training set which isn't in the test set. As long as the test loss doesn't start increasing then it is likely that the network is still working, with the maximum Fisher available from the network is the value obtained from the test set.
@@ -581,7 +628,7 @@ In ABC draws are accepted if the distance between the simulation summary and the
 
 
 ```python
-ϵ = 200
+ϵ = 100
 accept_indices = np.argwhere(ρ < ϵ)[:, 0]
 reject_indices = np.argwhere(ρ >= ϵ)[:, 0]
 ```
@@ -623,7 +670,7 @@ Here we can use
 θ_, summary_, ρ_, s_, W, total_draws, F = n.PMC(real_data = real_data, prior = [0, 10], num_draws = 1000, num_keep = 1000, generate_simulation = generate_data, criterion = 0.1, at_once = True, samples = None)
 ```
 
-    iteration = 26, current criterion = 0.08313934153641503, total draws = 66719, ϵ = 40.427178382873535.
+    iteration = 30, current criterion = 0.075431847325941, total draws = 77091, ϵ = 18.643490314483643.3.
 
 If we want the PMC to continue for longer we can provide the output of PMC as an input as
 ```python
