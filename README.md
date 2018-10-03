@@ -438,13 +438,13 @@ n.setup(η = η)
 ### Changing minimisation scheme
 By default the optimation scheme is<br>
 ```python
-n.backpropagate = tf.train.AdamOptimizer(η, β1, β2, ε).minimize(n.loss(n.F))
-```
-where β1, β2 and ε are left at their default values. To use any other training scheme, such as the `SGD` optimiser, it is sufficient to run
-```python
 n.backpropagate = tf.train.GradientDescentOptimizer(η).minimize(n.loss(n.F))
 ```
-after `setup(η)` to override the default minimisation routine. If you want to continue to use the default minimisation routine but want to change the learning rate without reinitialising you can run
+To use any other training scheme, such as the `Adam` optimiser, it is sufficient to run
+```python
+n.backpropagate = tf.train.AdamOptimizer(η, β1, β2, ε).minimize(n.loss(n.F))
+```
+after `setup(η)` to override the default minimisation routine. Note that `Adam` appears to be extremely unstable. If you want to continue to use the default minimisation routine but want to change the learning rate without reinitialising you can run
 ```python
 n.training_scheme(η = new_η)
 ```
@@ -454,7 +454,7 @@ With the data we can now train the network. The function simply takes the number
 
 
 ```python
-num_epochs = 1000
+num_epochs = 300
 keep_rate = 0.8
 ```
 
@@ -469,7 +469,7 @@ We can run
 n.train(num_epochs = num_epochs, n_train = n_train, keep_rate = keep_rate, history = True)
 ```
 
-    100%|██████████| 1000/1000 [04:16<00:00,  3.90it/s, detF=62.3, detF_test=34.4]
+    100%|██████████| 300/300 [01:12<00:00,  4.17it/s, detF=93.2, detF_test=67.2]
 
     saving the graph as data/saved_model.meta
 
@@ -628,7 +628,7 @@ In ABC draws are accepted if the distance between the simulation summary and the
 
 
 ```python
-ϵ = 100
+ϵ = 20000
 accept_indices = np.argwhere(ρ < ϵ)[:, 0]
 reject_indices = np.argwhere(ρ >= ϵ)[:, 0]
 ```
@@ -670,7 +670,7 @@ Here we can use
 θ_, summary_, ρ_, s_, W, total_draws, F = n.PMC(real_data = real_data, prior = [0, 10], num_draws = 1000, num_keep = 1000, generate_simulation = generate_data, criterion = 0.1, at_once = True, samples = None)
 ```
 
-    iteration = 30, current criterion = 0.075431847325941, total draws = 77091, ϵ = 18.643490314483643.3.
+    iteration = 29, current criterion = 0.09531979792202841, total draws = 55492, ϵ = 2109.6655883789062.
 
 If we want the PMC to continue for longer we can provide the output of PMC as an input as
 ```python
@@ -730,8 +730,6 @@ ax.set_yticks([]);
 ![png](figures/output_68_0.png)
 
 
-Notice here that the asymptotic likelihood doesn't work because the network work summaries cause overflow errors in the exponential.
-
 ## Analytic posterior calculation
 
 We know what the analytic posterior is for this model
@@ -761,4 +759,4 @@ ax.set_yticks([]);
 ```
 
 
-![png](figures/output_72_0.png)
+![png](figures/output_71_0.png)

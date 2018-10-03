@@ -227,7 +227,7 @@ class IMNN():
             if "central_indices" in [v.name for v in n.sess.graph.get_operations()]:
                 n.central_indices = tf.get_default_graph().get_tensor_by_name("central_indices:0")
                 n.derivative_indices = tf.get_default_graph().get_tensor_by_name("derivative_indices:0")
-            n.backpropagate = tf.get_default_graph().get_operation_by_name("Adam")
+            n.backpropagate = tf.get_default_graph().get_operation_by_name("GradientDescent")
 
     def dense(n, input_tensor, l, dropout):
         # DENSE LAYER
@@ -706,8 +706,8 @@ class IMNN():
         # backpropagate               n tf opt    - minimisation scheme for the network
         #______________________________________________________________
         η = utils.utils().isfloat(η, key = 'η')
-        n.backpropagate = tf.train.AdamOptimizer(η, epsilon = 1.).minimize(n.Λ)
-        #n.backpropagate = tf.train.GradientDescentOptimizer(η).minimize(n.loss(n.F))
+        #n.backpropagate = tf.train.AdamOptimizer(η, epsilon = 1.).minimize(n.Λ)
+        n.backpropagate = tf.train.GradientDescentOptimizer(η).minimize(n.loss(n.F))
 
     def train(n, num_epochs, n_train, keep_rate, history = True, data = None):
         # TRAIN INFORMATION MAXIMISING NEURAL NETWORK
