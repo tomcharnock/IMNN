@@ -227,7 +227,8 @@ class IMNN():
             if "central_indices" in [v.name for v in n.sess.graph.get_operations()]:
                 n.central_indices = tf.get_default_graph().get_tensor_by_name("central_indices:0")
                 n.derivative_indices = tf.get_default_graph().get_tensor_by_name("derivative_indices:0")
-            n.backpropagate = tf.get_default_graph().get_operation_by_name("GradientDescent")
+            #n.backpropagate = tf.get_default_graph().get_operation_by_name("GradientDescent")
+            n.backpropagate = tf.get_default_graph().get_operation_by_name("Adam")
 
     def dense(n, input_tensor, l, dropout):
         # DENSE LAYER
@@ -673,7 +674,7 @@ class IMNN():
         n.μ = tf.identity(μ, name = 'mean')
         n.dμdθ = tf.identity(dμdθ, name = 'mean_derivative')
         n.Λ = tf.identity(n.loss(n.F), name = 'loss')
-        test_F, test_iC, test_μ, test_dμdθ, test_C  = n.Fisher(test_output_central, test_output_m, test_output_p)
+        test_F, test_iC, test_μ, test_dμdθ, test_C = n.Fisher(test_output_central, test_output_m, test_output_p)
         n.test_F = tf.identity(test_F, name = "test_F")
         n.test_iC = tf.identity(test_iC, name = 'test_inverse_covariance')
         n.test_C = tf.identity(test_C, name = 'test_covariance')
@@ -706,10 +707,9 @@ class IMNN():
         # backpropagate               n tf opt    - minimisation scheme for the network
         #______________________________________________________________
         η = utils.utils().isfloat(η, key = 'η')
-        #n.backpropagate = tf.train.AdamOptimizer(η, epsilon = 1.).minimize(n.Λ)
-        n.backpropagate = tf.train.GradientDescentOptimizer(η).minimize(n.loss(n.F))
+        n.backpropagate = tf.train.AdamOptimizer(η).minimize(n.Λ)
 
-    def train(n, num_epochs, n_train, keep_rate, history = True, data = None):
+    def train(n, num_epochs, n_train, keep_rate, history = True, data = None, to_continue = False):
         # TRAIN INFORMATION MAXIMISING NEURAL NETWORK
         #______________________________________________________________
         # RETURNS
@@ -757,26 +757,34 @@ class IMNN():
         n_train = utils.utils().positive_integer(n_train, key = 'number of combinations')
         keep_rate = utils.utils().constrained_float(keep_rate, key = 'dropout')
 
-        n.history = {}
-        n.history["F"] = []
-        n.history["det(F)"] = []
-        if history:
-            n.history["Λ"] = []
-            n.history["μ"] = []
-            n.history["C"] = []
-            n.history["det(C)"] = []
-            n.history["dμdθ"] = []
+        if not to_continue:
+            n.history = {}
+            n.history["F"] = []
+            n.history["det(F)"] = []
+            if history:
+                n.history["Λ"] = []
+                n.history["μ"] = []
+                n.history["C"] = []
+                n.history["det(C)"] = []
+                n.history["dμdθ"] = []
+                if n.x_central.op.type != 'Placeholder':
+                    data = n.preload_data
+                if 'x_central_test' in data.keys():
+                    test = True
+                    n.history["test F"] = []
+                    n.history["det(test F)"] = []
+                    n.history["test Λ"] = []
+                    n.history["test μ"] = []
+                    n.history["test C"] = []
+                    n.history["det(test C)"] = []
+                    n.history["test dμdθ"] = []
+                else:
+                    test = False
+        else:
             if n.x_central.op.type != 'Placeholder':
                 data = n.preload_data
             if 'x_central_test' in data.keys():
                 test = True
-                n.history["test F"] = []
-                n.history["det(test F)"] = []
-                n.history["test Λ"] = []
-                n.history["test μ"] = []
-                n.history["test C"] = []
-                n.history["det(test C)"] = []
-                n.history["test dμdθ"] = []
             else:
                 test = False
 
