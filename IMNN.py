@@ -643,7 +643,7 @@ class IMNN():
         n.dd = tf.constant(n.derivative_denominator, dtype = n._FLOATX, name = "dd")
         n.dropout = tf.placeholder(n._FLOATX, shape = (), name = "dropout")
         if modify_tensor is not None:
-            with.variable_scope("IMNN") as scope:
+            with tf.variable_scope("IMNN") as scope:
                 n.x = modify_tensor(n.x)
                 central_input = modify_tensor(central_input)
                 scope.reuse_variables()
