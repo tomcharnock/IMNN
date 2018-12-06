@@ -804,12 +804,12 @@ class IMNN():
             if n.x_central.op.type != 'Placeholder':
                 for combination in range(n_train):
                     n.sess.run(n.backpropagate, feed_dict = {n.central_indices: central_indices[combination * n.n_s: (combination + 1) * n.n_s].reshape((n.n_s, 1)), n.derivative_indices: derivative_indices[combination * n.n_p: (combination + 1) * n.n_p].reshape((n.n_p, 1)), n.dropout: keep_rate})
-                train_F = n.sess.run(n.F, feed_dict = {n.central_indices: central_indices[combination * n.n_s: (combination + 1) * n.n_s].reshape((n.n_s, 1)), n.derivative_indices: derivative_indices[combination * n.n_p: (combination + 1) * n.n_p].reshape((n.n_p, 1)), n.dropout: 1.})
+                train_F = np.exp(n.sess.run(n.F, feed_dict = {n.central_indices: central_indices[combination * n.n_s: (combination + 1) * n.n_s].reshape((n.n_s, 1)), n.derivative_indices: derivative_indices[combination * n.n_p: (combination + 1) * n.n_p].reshape((n.n_p, 1)), n.dropout: 1.}))
                 det_train_F = np.linalg.det(train_F)
             else:
                 for combination in range(n_train):
                     n.sess.run(n.backpropagate, feed_dict = {n.x_central: data['x_central'][central_indices[combination * n.n_s: (combination + 1) * n.n_s]], n.x_m: data['x_m'][derivative_indices[combination * n.n_p: (combination + 1) * n.n_p]], n.x_p: data['x_p'][derivative_indices[combination * n.n_p: (combination + 1) * n.n_p]], n.dropout: keep_rate})
-                train_F = n.sess.run(n.F, feed_dict = {n.x_central: data['x_central'][central_indices[combination * n.n_s: (combination + 1) * n.n_s]], n.x_m: data['x_m'][derivative_indices[combination * n.n_p: (combination + 1) * n.n_p]], n.x_p: data['x_p'][derivative_indices[combination * n.n_p: (combination + 1) * n.n_p]], n.dropout: 1.})
+                train_F = np.exp(n.sess.run(n.F, feed_dict = {n.x_central: data['x_central'][central_indices[combination * n.n_s: (combination + 1) * n.n_s]], n.x_m: data['x_m'][derivative_indices[combination * n.n_p: (combination + 1) * n.n_p]], n.x_p: data['x_p'][derivative_indices[combination * n.n_p: (combination + 1) * n.n_p]], n.dropout: 1.}))
                 det_train_F = np.linalg.det(train_F)
             n.history["F"].append(train_F)
             n.history["det(F)"].append(det_train_F)
@@ -819,8 +819,8 @@ class IMNN():
                         μ, C, dμdθ, Λ, test_F, test_μ, test_C, test_dμdθ, test_Λ = n.sess.run([n.μ, n.C, n.dμdθ, n.Λ, n.test_F, n.test_μ, n.test_C, n.test_dμdθ, n.test_Λ], feed_dict = {n.central_indices: central_indices[combination * n.n_s: (combination + 1) * n.n_s].reshape((n.n_s, 1)), n.derivative_indices: derivative_indices[combination * n.n_p: (combination + 1) * n.n_p].reshape((n.n_p, 1)), n.dropout: 1.})
                     else:
                         μ, C, dμdθ, Λ, test_F, test_μ, test_C, test_dμdθ, test_Λ = n.sess.run([n.μ, n.C, n.dμdθ, n.Λ, n.test_F, n.test_μ, n.test_C, n.test_dμdθ, n.test_Λ], feed_dict = {n.x_central: data['x_central_test'], n.x_m: data['x_m_test'], n.x_p: data['x_p_test'], n.dropout: 1.})
-                    n.history["test F"].append(test_F)
-                    n.history["det(test F)"].append(np.linalg.det(test_F))
+                    n.history["test F"].append(np.exp(test_F))
+                    n.history["det(test F)"].append(np.linalg.det(np.exp(test_F)))
                     n.history["test μ"].append(test_μ)
                     n.history["test C"].append(test_C)
                     n.history["det(test C)"].append(np.linalg.det(test_C))
