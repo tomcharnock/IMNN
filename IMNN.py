@@ -645,8 +645,8 @@ class IMNN():
         if modify_tensor is not None:
             with tf.variable_scope("IMNN") as scope:
                 n.x = modify_tensor(n.x)
-                central_input = modify_tensor(central_input)
                 scope.reuse_variables()
+                central_input = modify_tensor(central_input)
                 derivative_input_m = modify_tensor(derivative_input_m)
                 scope.reuse_variables()
                 derivative_input_p = modify_tensor(derivative_input_p)
