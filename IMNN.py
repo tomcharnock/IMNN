@@ -538,7 +538,7 @@ class IMNN():
         IFI = tf.matrix_determinant(F)
         return tf.multiply(tf.constant(-0.5, dtype = n._FLOATX), tf.square(IFI))
 
-    def setup(n, η, network = None):
+    def setup(n, η, network = None, modify_tensor = None):
         # SETS UP GENERIC NETWORK
         #______________________________________________________________
         # FUNCTIONS (DEFINED IN IMNN.py)
@@ -558,6 +558,7 @@ class IMNN():
         # INPUTS
         # η                             float     - learning rate
         # network              optional func      - externally provided function for building network
+        # modify_tensor        optional func      - externally provided function for modifying the input tensor
         # inputs                      n int/list  - number of inputs (int) or shape of input (list)
         # preload_data                n dict/None - training data to be preloaded to TensorFlow constant
         # n_s                         n int       - total number of simulations
@@ -641,6 +642,15 @@ class IMNN():
         n.θ_fid = tf.constant(n.fiducial_θ, dtype = n._FLOATX, name = "fiducial")
         n.dd = tf.constant(n.derivative_denominator, dtype = n._FLOATX, name = "dd")
         n.dropout = tf.placeholder(n._FLOATX, shape = (), name = "dropout")
+        if modify_tensor is not None:
+            n.x = modify_tensor(n.x)
+            central_input = modify_tensor(central_input)
+            derivative_input_m = modify_tensor(derivative_input_m)
+            derivative_input_p = modify_tensor(derivative_input_p)
+            if test_input is not None:
+                test_input = modify_tensor(test_input)
+                test_derivative_input_m = modify_tensor(test_derivative_input_m)
+                test_derivative_input_p = modify_tensor(test_derivative_input_p)
         if n.prebuild:
             network = n.build_network
         utils.utils().to_prebuild(network)
