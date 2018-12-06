@@ -648,15 +648,10 @@ class IMNN():
                 scope.reuse_variables()
                 central_input = modify_tensor(central_input)
                 derivative_input_m = modify_tensor(derivative_input_m)
-                scope.reuse_variables()
                 derivative_input_p = modify_tensor(derivative_input_p)
-                scope.reuse_variables()
-                if test_input is not None:
-                    scope.reuse_variables()
+                if n.preload_data is not None and set(["x_central_test", "x_m_test", "x_p_test"]).issubset(n.preload_data.keys()):
                     test_input = modify_tensor(test_input)
-                    scope.reuse_variables()
                     test_derivative_input_m = modify_tensor(test_derivative_input_m)
-                    scope.reuse_variables()
                     test_derivative_input_p = modify_tensor(test_derivative_input_p)
         if n.prebuild:
             network = n.build_network
@@ -666,7 +661,7 @@ class IMNN():
         n.output = tf.identity(output, name = "output")
         if n.verbose: print(n.output)
         with tf.variable_scope("IMNN") as scope:
-            scope.reuse_variables()
+            #scope.reuse_variables()
             output_central = network(central_input, n.dropout)
             scope.reuse_variables()
             output_m = network(derivative_input_m, n.dropout)
