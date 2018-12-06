@@ -661,18 +661,13 @@ class IMNN():
         n.output = tf.identity(output, name = "output")
         if n.verbose: print(n.output)
         with tf.variable_scope("IMNN") as scope:
-            #scope.reuse_variables()
+            scope.reuse_variables()
             output_central = network(central_input, n.dropout)
-            scope.reuse_variables()
             output_m = network(derivative_input_m, n.dropout)
-            scope.reuse_variables()
             output_p = network(derivative_input_p, n.dropout)
             if n.preload_data is not None and test_input is not None:
-                scope.reuse_variables()
                 test_output_central = network(test_input, 1.)
-                scope.reuse_variables()
                 test_output_m = network(test_derivative_input_m, 1.)
-                scope.reuse_variables()
                 test_output_p = network(test_derivative_input_p, 1.)
             else:
                 test_output_central = output_central
