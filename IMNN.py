@@ -535,7 +535,7 @@ class IMNN():
         # VARIABLES
         # IFI                           tensor    - determinant of the Fisher information matrix
         #______________________________________________________________
-        IFI = tf.matrix_determinant(F)
+        IFI = tf.log(tf.matrix_determinant(F))
         return tf.multiply(tf.constant(-0.5, dtype = n._FLOATX), tf.square(IFI))
 
     def setup(n, η, network = None, modify_tensor = None):
