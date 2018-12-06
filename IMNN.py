@@ -643,14 +643,21 @@ class IMNN():
         n.dd = tf.constant(n.derivative_denominator, dtype = n._FLOATX, name = "dd")
         n.dropout = tf.placeholder(n._FLOATX, shape = (), name = "dropout")
         if modify_tensor is not None:
-            n.x = modify_tensor(n.x)
-            central_input = modify_tensor(central_input)
-            derivative_input_m = modify_tensor(derivative_input_m)
-            derivative_input_p = modify_tensor(derivative_input_p)
-            if test_input is not None:
-                test_input = modify_tensor(test_input)
-                test_derivative_input_m = modify_tensor(test_derivative_input_m)
-                test_derivative_input_p = modify_tensor(test_derivative_input_p)
+            with.variable_scope("IMNN") as scope:
+                n.x = modify_tensor(n.x)
+                central_input = modify_tensor(central_input)
+                scope.reuse_variables()
+                derivative_input_m = modify_tensor(derivative_input_m)
+                scope.reuse_variables()
+                derivative_input_p = modify_tensor(derivative_input_p)
+                scope.reuse_variables()
+                if test_input is not None:
+                    scope.reuse_variables()
+                    test_input = modify_tensor(test_input)
+                    scope.reuse_variables()
+                    test_derivative_input_m = modify_tensor(test_derivative_input_m)
+                    scope.reuse_variables()
+                    test_derivative_input_p = modify_tensor(test_derivative_input_p)
         if n.prebuild:
             network = n.build_network
         utils.utils().to_prebuild(network)
