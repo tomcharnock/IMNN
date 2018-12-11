@@ -304,18 +304,24 @@ class IMNN():
         # conv                          tensor    - convolutional feature map (not activated)
         #______________________________________________________________
         previous_filters = int(input_tensor.get_shape().as_list()[-1])
-        if len(n.layers[l][1]) == 2:
+        if len(n.layers[l][1]) == 1:
+            convolution = tf.nn.conv1d
+            weight_shape = (n.layers[l][1][0], previous_filters, n.layers[l][0])
+            stride_shape = n.layers[l][2][0]
+        elif len(n.layers[l][1]) == 2:
             convolution = tf.nn.conv2d
             weight_shape = (n.layers[l][1][0], n.layers[l][1][1], previous_filters, n.layers[l][0])
+            stride_shape = [1] + n.layers[l][2] + [1]
         else:
             convolution = tf.nn.conv3d
-            weight_shape = (n.layers[l][1][0], n.layers[l][1][1], n.layers[l][1][1], previous_filters, n.layers[l][0])
+            weight_shape = (n.layers[l][1][0], n.layers[l][1][1], n.layers[l][1][2], previous_filters, n.layers[l][0])
+            stride_shape = [1] + n.layers[l][2] + [1]
         bias_shape = (n.layers[l][0])
         if n.allow_init:
             n.wv = np.sqrt(2. / previous_filters)
         weights = tf.get_variable("weights", weight_shape, initializer = tf.random_normal_initializer(0., n.wv))
         biases = tf.get_variable("biases", bias_shape, initializer = tf.constant_initializer(n.bb))
-        conv = tf.add(convolution(input_tensor, weights, [1] + n.layers[l][2] + [1], padding = n.layers[l][3]), biases)
+        conv = tf.add(convolution(input_tensor, weights, stride_shape, padding = n.layers[l][3]), biases)
         if n.takes_α:
             return tf.nn.dropout(n.activation(conv, n.α), dropout, name = 'conv_' + str(l))
         else:
@@ -354,8 +360,8 @@ class IMNN():
             else:
                 drop_val = 1.
             if type(n.layers[l]) == list:
-                if len(layer[-1].get_shape().as_list()) < 2:
-                    layer.append(tf.reshape(layer[-1], (-1, layer[-1].get_shape().as_list()[-1], 1)))
+                if len(layer[-1].get_shape().as_list()) < len(n.layers[l]) - 1:
+                    layer.append(tf.reshape(layer[-1], [-1] + layer[-1].get_shape().as_list()[1:] + [1 for i in range(len(n.layers[l]) - len(layer[-1].get_shape().as_list()) - 1)]))
                 with tf.variable_scope('layer_' + str(l)):
                     layer.append(n.conv(layer[-1], l, drop_val))
             else:
@@ -364,6 +370,8 @@ class IMNN():
                 with tf.variable_scope('layer_' + str(l)):
                     layer.append(n.dense(layer[-1], l, drop_val))
             if n.verbose: print(layer[-1])
+        #if layer[-1].get_shape().as_list()[-1] > 1:
+        #    layer[-1] = tf.divide(layer[-1], tf.reduce_sum(tf.abs(layer[-1]), axis = -1, keepdims = True))
         return layer[-1]
 
     def inverse_covariance(n, a):
@@ -397,8 +405,10 @@ class IMNN():
         outmm = tf.subtract(a_, tf.expand_dims(μ, 0), name = 'central_difference_from_mean')
         if n.verbose: print(outmm)
         C = tf.divide(tf.einsum('ij,ik->jk', outmm, outmm), tf.constant((n.n_s - 1.), dtype = n._FLOATX), name = 'central_covariance')
-        if n.verbose: print(C)
-        iC = tf.matrix_inverse(C, name = 'inverse_central_covariance')
+        n.Ce, n.Cv = tf.linalg.eigh(C)
+        ϵ = 1e-13
+        n.iCe = tf.diag(tf.where(tf.greater(n.Ce, ϵ), 1. / n.Ce, 1. / ϵ * tf.ones_like(n.Ce)))
+        iC = tf.einsum("ij,jk->ik", n.Cv, tf.einsum("ij,jk->ik", n.iCe, tf.linalg.inv(n.Cv)))
         if n.verbose: print(iC)
         return iC, μ, C
 
@@ -535,8 +545,9 @@ class IMNN():
         # VARIABLES
         # IFI                           tensor    - determinant of the Fisher information matrix
         #______________________________________________________________
-        IFI = tf.log(tf.matrix_determinant(F))
-        return tf.multiply(tf.constant(-0.5, dtype = n._FLOATX), tf.square(IFI))
+        detF = tf.matrix_determinant(F)
+        return -tf.log(detF)
+        #-IFI#tf.multiply(tf.constant(-0.5, dtype = n._FLOATX), tf.square(IFI))
 
     def setup(n, η, network = None, modify_tensor = None):
         # SETS UP GENERIC NETWORK
@@ -763,6 +774,7 @@ class IMNN():
         num_epochs = utils.utils().positive_integer(num_epochs, key = 'number of epochs')
         n_train = utils.utils().positive_integer(n_train, key = 'number of combinations')
         keep_rate = utils.utils().constrained_float(keep_rate, key = 'dropout')
+        nb = utils.utils().isnotebook()
 
         if not to_continue:
             n.history = {}
@@ -797,7 +809,10 @@ class IMNN():
 
         central_indices = np.arange(n.n_s * n_train)
         derivative_indices = np.arange(n.n_p * n_train)
-        tq = tqdm.trange(num_epochs)
+        if nb:
+            tq = tqdm.tnrange(num_epochs)
+        else:
+            tq = tqdm.trange(num_epochs)
         for epoch in tq:
             np.random.shuffle(central_indices)
             np.random.shuffle(derivative_indices)
@@ -885,6 +900,10 @@ class IMNN():
         # difference                    array     - difference between summary of real data and summaries of simulations
         # distances                     array     - Euclidean distance between real summary and summaries of simulations
         #______________________________________________________________
+        if utils.utils().isnotebook():
+            bar = tqdm.tqdm_notebook
+        else:
+            bar = tqdm.tqdm
         if n.x_central.op.type != 'Placeholder':
             F = n.sess.run(n.test_F)
         else:
@@ -896,7 +915,7 @@ class IMNN():
             simulation_summaries = n.sess.run(n.output, feed_dict = {n.x: simulations, n.dropout: 1.})
         else:
             simulation_summaries = np.zeros([draws, n.n_summaries])
-            for theta in tqdm.tqdm(range(draws)):
+            for theta in bar(range(draws)):
                 simulation = generate_simulation([θ[theta]])
                 simulation_summaries[theta] = n.sess.run(n.output, feed_dict = {n.x: simulation, n.dropout: 1.})[0]
         difference = simulation_summaries - summary

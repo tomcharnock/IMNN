@@ -349,8 +349,8 @@ class utils():
         if len(value) == 1:
             value[0] = u.positive_integer(value[0], key = key)
         else:
-            if len(value) < 3 or len(value) > 4:
-                print(key + ' must be a list of 1, 3 or 4 positive integers. the length of the list is ' + str(len(value)) + '.')
+            if len(value) < 2 or len(value) > 4:
+                print(key + ' must be a list of 1 - 4 positive integers. the length of the list is ' + str(len(value)) + '.')
                 sys.exit()
             for i in range(len(value)):
                 value[i] = u.positive_integer(value[i], optional = 'the problem is at element ' + str(i) + '.', key = key)
@@ -634,7 +634,7 @@ class utils():
                 hidden_layer.append(u.positive_integer(inner_value, key = 'layer ' + str(i + 1) + ' ', optional = 'this value can also be a list.'))
             else:
                 if len(inner_value) != 4:
-                    print('each convoultional layer in ' + key + ' must be a list of a positive integer (number of filters), two lists which contain two integers (x and y kernal size in the first list and x and y strides in the second) and finally a string of either "SAME" or "VALID" for padding type). the length of the list is ' + str(len(inner_value)) + '. an integer value can also be used.')
+                    print('each convoultional layer in ' + key + ' must be a list of a positive integer (number of filters), two lists which contain two integers (kernel sizes in the first list and strides in the second) and finally a string of either "SAME" or "VALID" for padding type). the length of the list is ' + str(len(inner_value)) + '. an integer value can also be used.')
                     sys.exit()
                 for j in range(4):
                     if j == 0:
@@ -643,12 +643,12 @@ class utils():
                         if type(inner_value[j]) != list:
                             print('element ' + str(j) + ' of hidden layer ' + str(i + 1) + ' must be a list. provided type is ' + str(type(inner_value[j])) + '.')
                             sys.exit()
-                        if len(inner_value[j]) < 2 or len(inner_value[j]) > 3:
+                        if len(inner_value[j]) < 1 or len(inner_value[j]) > 3:
                             if j == 1:
-                                print('element 1 of hidden layer ' + str(i + 1) + ' list must be a list with two or three positive integers for 2D or 3D convolutions which describe the shape of the x and y kernel in the convolution. the provided length is ' + str(len(inner_value[j])) + '.')
+                                print('element 1 of hidden layer ' + str(i + 1) + ' list must be a list with one, two or three positive integers for 1D, 2D or 3D convolutions which describe the shape of the kernel in the convolution. the provided length is ' + str(len(inner_value[j])) + '.')
                                 sys.exit()
                             if j == 2:
-                                print('element 2 of hidden layer ' + str(i + 1) + 'list must be a list with two or three positive integers for 2D or 3D convolutions which describe the strides in the x and y direction in the convolution. the provided length is ' + str(len(inner_value[j])) + '.')
+                                print('element 2 of hidden layer ' + str(i + 1) + 'list must be a list with one, two or three positive integers for 1D, 2D or 3D convolutions which describe the strides in the convolution. the provided length is ' + str(len(inner_value[j])) + '.')
                                 sys.exit()
                         for k in range(len(inner_value[j])):
                             inner_value[j][k] = u.positive_integer(inner_value[j][k], optional = 'the problem is at element ' + str(k) + ' of element ' + str(j) + ' of hidden layer ' + str(i + 1) + '.', key = 'hidden layer')
@@ -772,3 +772,15 @@ class utils():
             if high%low != 0:
                 print('number of combinations needs to be divisible by the number of batches.')
                 sys.exit()
+
+    def isnotebook(u):
+        try:
+            shell = get_ipython().__class__.__name__
+            if shell == 'ZMQInteractiveShell':
+                return True   # Jupyter notebook or qtconsole
+            elif shell == 'TerminalInteractiveShell':
+                return False  # Terminal running IPython
+            else:
+                return False  # Other type (?)
+        except NameError:
+            return False
