@@ -2,6 +2,7 @@ import tensorflow as tf
 import numpy as np
 import tqdm
 import utils
+from scipy import stats
 
 class IMNN():
     def __init__(n, parameters):
