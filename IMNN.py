@@ -934,9 +934,10 @@ class IMNN():
         # PERFORM APPROXIMATE BAYESIAN COMPUTATION USING POPULATION MONTE CARLO
         #______________________________________________________________
         # RETURNS
-        # array, float, array, array, array, int, array
+        # array, float, array, array, array, int, array, list
         # sampled parameter values, network summary of real data, distances between simulation summaries and real summary,
-        #    summaries of simulations, weighting of samples, total number of draws so far and Fisher information
+        #    summaries of simulations, weighting of samples, total number of draws so far, Fisher information 
+        #    and a list of epsilon per iteration
         #______________________________________________________________
         # FUNCTIONS (DEFINED IN utils.py)
         # to_continue(list)             bool      - True if continue running PMC
@@ -1026,9 +1027,11 @@ class IMNN():
         iteration = 0
         criterion_reached = 1e10
 
+        all_ϵ = [] # save epsilon per iteration
         while criterion < criterion_reached:
             cov = np.cov(θ_, aweights = W, rowvar=False)
             ϵ = np.percentile(ρ_, 75)
+            all_ϵ.append(ϵ)
             redraw_index = np.where(ρ_ >= ϵ)[0]
             W_temp = np.copy(W)
             current_draws = len(redraw_index)
@@ -1090,7 +1093,7 @@ class IMNN():
             iteration += 1
             total_draws += draws
             print('iteration = ' + str(iteration) + ', current criterion = ' + str(criterion_reached) + ', total draws = ' + str(total_draws) + ', ϵ = ' + str(ϵ) + '.', end = '\r')
-        return θ_, summary, ρ_, s_, W, total_draws, F
+        return θ_, summary, ρ_, s_, W, total_draws, F, all_ϵ
 
     def θ_MLE(n, real_data, data = None):
         # CALCULATE MAXIMUM LIKELIHOOD ESTIMATE OF PARAMETERS
