@@ -2,6 +2,7 @@ import tensorflow as tf
 import numpy as np
 import tqdm
 import utils
+from scipy import stats
 
 class IMNN():
     def __init__(n, parameters):
@@ -873,7 +874,8 @@ class IMNN():
         #______________________________________________________________
         # INPUTS
         # real_data                     array     - real data to be summarised
-        # prior                         list      - lower and upper bound of uniform prior
+        # prior                         list      - list of lists of lower and upper bounds of uniform priors
+                                                    # has to be shape (n.n_params,2)
         # draws                         int       - number of draws from the prior
         # generate_simulation           func      - function which generates the simulation at parameter value
         # at_once              optional bool      - True if generate all simulations and calculate all summaries at once
@@ -900,24 +902,30 @@ class IMNN():
         # difference                    array     - difference between summary of real data and summaries of simulations
         # distances                     array     - Euclidean distance between real summary and summaries of simulations
         #______________________________________________________________
-        if utils.utils().isnotebook():
-            bar = tqdm.tqdm_notebook
-        else:
-            bar = tqdm.tqdm
         if n.x_central.op.type != 'Placeholder':
             F = n.sess.run(n.test_F)
         else:
             F = n.sess.run(n.test_F, feed_dict = {n.x_central: data['x_central_test'], n.x_m: data['x_m_test'], n.x_p: data['x_p_test'], n.dropout: 1.})
         summary = n.sess.run(n.output, feed_dict = {n.x: real_data, n.dropout: 1.})[0]
-        θ = np.random.uniform(prior[0], prior[1], draws)
+        
+        assert np.shape(prior)  == (n.n_params,2), 'prior has to be a list of %i lists of priors, each of shape (2,)'%len(prior)
+        if n.n_params > 1:
+            θ = []
+            for i in range(n.n_params):
+                θ.append(np.random.uniform(*prior[i], draws))
+            θ = np.asarray(θ).T # Shape (draws,n.n_params)
+        else: 
+            θ = np.random.uniform(*prior[0], draws)
+        
         if at_once:
             simulations = generate_simulation(θ)
             simulation_summaries = n.sess.run(n.output, feed_dict = {n.x: simulations, n.dropout: 1.})
         else:
             simulation_summaries = np.zeros([draws, n.n_summaries])
-            for theta in bar(range(draws)):
+            for theta in tqdm.tqdm(range(draws)):
                 simulation = generate_simulation([θ[theta]])
                 simulation_summaries[theta] = n.sess.run(n.output, feed_dict = {n.x: simulation, n.dropout: 1.})[0]
+        
         difference = simulation_summaries - summary
         distances = np.sqrt(np.einsum('ij,ij->i', difference, np.einsum('jk,ik->ij', F, difference)))
         return θ, summary, simulation_summaries, distances, F
@@ -926,9 +934,10 @@ class IMNN():
         # PERFORM APPROXIMATE BAYESIAN COMPUTATION USING POPULATION MONTE CARLO
         #______________________________________________________________
         # RETURNS
-        # array, float, array, array, array, int, array
+        # array, float, array, array, array, int, array, list
         # sampled parameter values, network summary of real data, distances between simulation summaries and real summary,
-        #    summaries of simulations, weighting of samples, total number of draws so far and Fisher information
+        #    summaries of simulations, weighting of samples, total number of draws so far, Fisher information 
+        #    and a list of epsilon per iteration
         #______________________________________________________________
         # FUNCTIONS (DEFINED IN utils.py)
         # to_continue(list)             bool      - True if continue running PMC
@@ -937,7 +946,8 @@ class IMNN():
         #______________________________________________________________
         # INPUTS
         # real_data                     array     - real data to be summarised
-        # prior                         list      - lower and upper bound of uniform prior
+        # prior                         list      - list of lists of lower and upper bounds of uniform priors
+                                                    # has to be shape (n.n_params,2)
         # num_draws                     int       - number of initial draws from the prior
         # num_keep                      int       - number of samples in the approximate posterior
         # generate_simulation           func      - function which generates the simulation at parameter value
@@ -1002,26 +1012,54 @@ class IMNN():
             s_ = s[keep_index[: num_keep]]
             W = np.ones(num_keep) / num_keep
             total_draws = num_draws
-        pθ = 1./(prior[1] - prior[0])
+        
+        assert np.shape(prior)  == (n.n_params,2), 'prior has to be a list of %i lists of priors, each of shape (2,)'%len(prior)
+        if n.n_params == 1: 
+            pθ = 1./(prior[0][1] - prior[0][0])
+        else:
+            print ('For multiple parameters only uniform prior is implemented for PMC')
+            pθ = 1. 
+
+        # for checking if new particles are in prior range
+        lower_bound_priors = [prior[i][0] for i in range(len(prior))]
+        upper_bound_priors = [prior[i][1] for i in range(len(prior))]
+
         iteration = 0
         criterion_reached = 1e10
+
+        all_ϵ = [] # save epsilon per iteration
         while criterion < criterion_reached:
-            cov = np.cov(θ_, aweights = W)
+            cov = np.cov(θ_, aweights = W, rowvar=False)
             ϵ = np.percentile(ρ_, 75)
+            all_ϵ.append(ϵ)
             redraw_index = np.where(ρ_ >= ϵ)[0]
             W_temp = np.copy(W)
             current_draws = len(redraw_index)
             draws = 0
             while current_draws > 0:
                 draws += current_draws
-                θ_temp = np.random.normal(θ_[redraw_index], np.sqrt(cov))
-                below_prior = np.where(θ_temp <= prior[0])[0]
-                above_prior = np.where(θ_temp > prior[1])[0]
+                
+                if n.n_params == 1: # if only 1 param this is a lot faster, but doesnt work for >1 param
+                    θ_temp = np.random.normal(θ_[redraw_index], np.sqrt(cov))
+                else: 
+                    θ_temp = np.asarray([np.random.multivariate_normal(θ_[redraw_index][i],cov) for i in range(len(θ_[redraw_index]))])
+
+                below_prior = np.where(θ_temp <= lower_bound_priors)[0] # row index
+                above_prior = np.where(θ_temp > upper_bound_priors)[0] # row index
                 while len(below_prior) > 0 or len(above_prior) > 0:
-                    θ_temp[below_prior] = np.random.normal(θ_[redraw_index[below_prior]], np.sqrt(cov))
-                    θ_temp[above_prior] = np.random.normal(θ_[redraw_index[above_prior]], np.sqrt(cov))
-                    below_prior = np.where(θ_temp <= prior[0])[0]
-                    above_prior = np.where(θ_temp > prior[1])[0]
+                    if len(below_prior) > 0:
+                        if n.n_params == 1:
+                            θ_temp[below_prior] = np.random.normal(θ_[redraw_index[below_prior]], np.sqrt(cov))
+                        else:
+                            θ_temp[below_prior] = np.asarray([np.random.multivariate_normal(θ_[redraw_index[below_prior]][i],cov) for i in range(len([redraw_index[below_prior]]))])
+                    if len(above_prior) > 0:
+                        if n.n_params == 1:
+                            θ_temp[above_prior] = np.random.normal(θ_[redraw_index[above_prior]], np.sqrt(cov))
+                        else:
+                            θ_temp[above_prior] = np.asarray([np.random.multivariate_normal(θ_[redraw_index[above_prior]][i],cov) for i in range(len([redraw_index[below_prior]]))])
+                    below_prior = np.where(θ_temp <= lower_bound_priors)[0]
+                    above_prior = np.where(θ_temp > upper_bound_priors)[0]
+
                 if at_once:
                     simulations = generate_simulation(θ_temp)
                     simulation_summaries = n.sess.run(n.output, feed_dict = {n.x: simulations, n.dropout: 1.})
@@ -1037,7 +1075,17 @@ class IMNN():
                     ρ_[redraw_index[accept_index]] = ρ_temp[accept_index]
                     θ_[redraw_index[accept_index]] = θ_temp[accept_index]
                     s_[redraw_index[accept_index]] = simulation_summaries[accept_index]
-                    W_temp[redraw_index[accept_index]] = pθ / np.sum(W[:, None] * np.exp(-0.5 * (np.stack([θ_temp[accept_index] for i in range(num_keep)]) - θ_[:, None])**2. / cov) / np.sqrt(2 * np.pi * cov), axis = 0)
+                    # for every particle calculate the new weight
+                    if n.n_params == 1:
+                        W_temp[redraw_index[accept_index]] = pθ / np.sum(W[:, None] * np.exp(-0.5 * (np.stack([θ_temp[accept_index] for i in range(num_keep)]) - θ_[:, None])**2. / cov) / np.sqrt(2 * np.pi * cov), axis = 0)
+                    else:
+                        # Formula according to https://arxiv.org/pdf/1504.07245.pdf
+                        kernels = [stats.multivariate_normal(θ_[i],2*cov).pdf for i in range(len(θ_))]
+                        # Only uniform prior is implemented for >1 particle (p0 = 1)
+                        wt = [pθ / np.sum(W_temp * kernels[i](θ_)) for i in range(len(kernels))]
+                        W_temp = np.asarray(wt)
+                        W_temp /= np.sum(W_temp)
+
                 redraw_index = np.where(ρ_ >= ϵ)[0]
                 current_draws = len(redraw_index)
             W = np.copy(W_temp)
@@ -1045,7 +1093,7 @@ class IMNN():
             iteration += 1
             total_draws += draws
             print('iteration = ' + str(iteration) + ', current criterion = ' + str(criterion_reached) + ', total draws = ' + str(total_draws) + ', ϵ = ' + str(ϵ) + '.', end = '\r')
-        return θ_, summary, ρ_, s_, W, total_draws, F
+        return θ_, summary, ρ_, s_, W, total_draws, F, all_ϵ
 
     def θ_MLE(n, real_data, data = None):
         # CALCULATE MAXIMUM LIKELIHOOD ESTIMATE OF PARAMETERS
