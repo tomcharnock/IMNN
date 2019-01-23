@@ -5,7 +5,7 @@ the IMNN.
 """
 
 
-__version__ = '0.1a'
+__version__ = '0.1dev'
 __author__ = "Tom Charnock"
 
 
