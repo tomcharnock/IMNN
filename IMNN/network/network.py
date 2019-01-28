@@ -7,7 +7,7 @@ certainly get better results.
 """
 
 
-__version__ = "0.1dev"
+__version__ = "0.1dev2"
 __author__ = "Tom Charnock"
 
 

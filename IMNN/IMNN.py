@@ -6,7 +6,7 @@ model parameters.
 """
 
 
-__version__ = '0.1dev'
+__version__ = '0.1dev2'
 __author__ = "Tom Charnock"
 
 
@@ -412,7 +412,7 @@ class IMNN():
         if self.load_data:
             data_ind = tf.placeholder(dtype=self._INTX, shape=(None, 1),
                                       name="data_ind")
-            data_d_ind = tf.placeholder(dtype=self.INTX, shape=(None, 1),
+            data_d_ind = tf.placeholder(dtype=self._INTX, shape=(None, 1),
                                         name="data_d_ind")
             stored_data = tf.Variable(load_data["data"], dtype=self._FLOATX,
                                       trainable=False, name="stored_data")
