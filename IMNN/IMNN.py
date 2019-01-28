@@ -6,7 +6,7 @@ model parameters.
 """
 
 
-__version__ = '0.1dev2'
+__version__ = '0.1dev3'
 __author__ = "Tom Charnock"
 
 
