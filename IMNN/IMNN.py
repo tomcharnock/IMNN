@@ -6,7 +6,7 @@ model parameters.
 """
 
 
-__version__ = '0.1dev5'
+__version__ = '0.1dev6'
 __author__ = "Tom Charnock"
 
 
@@ -171,16 +171,17 @@ class IMNN():
             if first_time:
                 self.saver = tf.train.Saver()
                 self.saver.save(self.sess, "./" + savefile)
-                np.savez("./" + savefile + ".npz",
-                         store_gradients=[i.name
-                                          for i in self.store_gradients],
-                         get_gradients=[i.name for i in self.get_gradients],
-                         reset_gradients=[i.name
-                                          for i in self.reset_gradients],
-                         apply_gradients=[self.apply_gradients.name])
+                np.savez(
+                    "./" + savefile + ".npz",
+                    store_gradients=[i.name for i in self.store_gradients],
+                    get_gradients=[i.name for i in self.get_gradients],
+                    reset_gradients=[i.name for i in self.reset_gradients],
+                    apply_gradients=[self.apply_gradients.name])
             else:
-                self.saver.save(self.sess, "./" + savefile,
-                                write_meta_graph=False)
+                self.saver.save(
+                    self.sess,
+                    "./" + savefile,
+                    write_meta_graph=False)
 
     def restore_network(self):
         """Loader function for TF graph
@@ -204,24 +205,23 @@ class IMNN():
             loader = tf.train.import_meta_graph("./" + self.filename + ".meta")
             loader.restore(self.sess, self.filename)
             load_arrays = np.load("./" + self.filename + ".npz")
-            self.get_compressor = [tf.get_default_graph(
-                ).get_tensor_by_name("get_fisher:0"),
-                                   tf.get_default_graph(
-                ).get_tensor_by_name("get_inverse_fisher:0"),
-                                   tf.get_default_graph(
-                ).get_tensor_by_name("get_mean:0"),
-                                   tf.get_default_graph(
-                ).get_tensor_by_name("get_compression:0")]
-            self.store_gradients = [tf.get_default_graph(
-                ).get_tensor_by_name(i)
-                for i in load_arrays["store_gradients"]]
-            self.get_gradients = [tf.get_default_graph().get_tensor_by_name(i)
-                                  for i in load_arrays["get_gradients"]]
-            self.reset_gradients = [tf.get_default_graph(
-                ).get_tensor_by_name(i)
-                for i in load_arrays["reset_gradients"]]
+            self.get_compressor = [
+                tf.get_default_graph().get_tensor_by_name("get_fisher:0"),
+                tf.get_default_graph(
+                    ).get_tensor_by_name("get_inverse_fisher:0"),
+                tf.get_default_graph().get_tensor_by_name("get_mean:0"),
+                tf.get_default_graph().get_tensor_by_name("get_compression:0")]
+            self.store_gradients = [
+                tf.get_default_graph().get_tensor_by_name(i) for
+                i in load_arrays["store_gradients"]]
+            self.get_gradients = [
+                tf.get_default_graph().get_tensor_by_name(i) for
+                i in load_arrays["get_gradients"]]
+            self.reset_gradients = [
+                tf.get_default_graph().get_tensor_by_name(i) for
+                i in load_arrays["reset_gradients"]]
             self.apply_gradients = tf.get_default_graph(
-            ).get_operation_by_name(load_arrays["apply_gradients"][0])
+                ).get_operation_by_name(load_arrays["apply_gradients"][0])
         else:
             print("cannot load model since there is no provided filename")
 
@@ -408,121 +408,211 @@ class IMNN():
             check_data(self, load_data)
         else:
             self.load_data = False
-        lr = tf.placeholder(dtype=self._FLOATX, shape=(), name="learning_rate")
+        lr = tf.placeholder(
+            dtype=self._FLOATX,
+            shape=(),
+            name="learning_rate")
         if self.load_data:
-            data_ind = tf.placeholder(dtype=self._INTX, shape=(None, 1),
-                                      name="data_ind")
-            data_d_ind = tf.placeholder(dtype=self._INTX, shape=(None, 1),
-                                        name="data_d_ind")
-            stored_data = tf.Variable(load_data["data"], dtype=self._FLOATX,
-                                      trainable=False, name="stored_data")
-            stored_data_d = tf.Variable(load_data["data_d"],
-                                        dtype=self._FLOATX, trainable=False,
-                                        name="stored_data_d")
-            data = tf.gather_nd(stored_data, data_ind, name="data")
-            data_d = tf.gather_nd(stored_data_d, data_d_ind, name="data_d")
+            data_ind = tf.placeholder(
+                dtype=self._INTX,
+                shape=(None, 1),
+                name="data_ind")
+            data_d_ind = tf.placeholder(
+                dtype=self._INTX,
+                shape=(None, 1),
+                name="data_d_ind")
+            stored_data = tf.Variable(
+                load_data["data"],
+                dtype=self._FLOATX,
+                trainable=False,
+                name="stored_data")
+            stored_data_d = tf.Variable(
+                load_data["data_d"],
+                dtype=self._FLOATX,
+                trainable=False,
+                name="stored_data_d")
+            data = tf.gather_nd(
+                stored_data,
+                data_ind,
+                name="data")
+            data_d = tf.gather_nd(
+                stored_data_d,
+                data_d_ind,
+                name="data_d")
         else:
-            data = tf.placeholder(dtype=self._FLOATX, shape=[None]
-                                  + self.input_shape, name="data")
-            data_d = tf.placeholder(dtype=self._FLOATX,
-                                    shape=[None, self.n_params]
-                                    + self.input_shape, name="data_d")
+            data = tf.placeholder(
+                dtype=self._FLOATX,
+                shape=[None] + self.input_shape,
+                name="data")
+            data_d = tf.placeholder(
+                dtype=self._FLOATX,
+                shape=[None, self.n_params] + self.input_shape,
+                name="data_d")
 
-        index = tf.placeholder(dtype=self._INTX, shape=(None), name="index")
+        index = tf.placeholder(
+            dtype=self._INTX,
+            shape=(None),
+            name="index")
 
-        summaries = tf.Variable(np.zeros((self.n_s, self.n_summaries)),
-                                dtype=self._FLOATX, trainable=False,
-                                name="summaries")
-        summaries_d = tf.Variable(np.zeros((self.n_p, self.n_params,
-                                            self.n_summaries)),
-                                  dtype=self._FLOATX, trainable=False,
-                                  name="summaries_d")
+        summaries = tf.Variable(
+            np.zeros((self.n_s, self.n_summaries)),
+            dtype=self._FLOATX,
+            trainable=False,
+            name="summaries")
+        summaries_d = tf.Variable(
+            np.zeros((self.n_p, self.n_params, self.n_summaries)),
+            dtype=self._FLOATX,
+            trainable=False,
+            name="summaries_d")
 
-        fiducial = tf.Variable([self.fiducial], dtype=self._FLOATX,
-                               trainable=False, name="fiducial")
-        fisher = tf.Variable(np.zeros((self.n_params, self.n_params)),
-                             dtype=self._FLOATX, trainable=False,
-                             name="fisher")
-        inv_fisher = tf.Variable(np.zeros((self.n_params, self.n_params)),
-                                 dtype=self._FLOATX, trainable=False,
-                                 name="inverse_fisher")
-        mean = tf.Variable(np.zeros((1, self.n_summaries)), dtype=self._FLOATX,
-                           trainable=False, name="saved_mean")
-        compressor = tf.Variable(np.zeros((self.n_params, self.n_summaries)),
-                                 dtype=self._FLOATX, trainable=False,
-                                 name="compressor")
+        fiducial = tf.Variable(
+            [self.fiducial],
+            dtype=self._FLOATX,
+            trainable=False,
+            name="fiducial")
+        fisher = tf.Variable(
+            np.zeros((self.n_params, self.n_params)),
+            dtype=self._FLOATX,
+            trainable=False,
+            name="fisher")
+        inv_fisher = tf.Variable(
+            np.zeros((self.n_params, self.n_params)),
+            dtype=self._FLOATX,
+            trainable=False,
+            name="inverse_fisher")
+        mean = tf.Variable(
+            np.zeros((1, self.n_summaries)),
+            dtype=self._FLOATX,
+            trainable=False,
+            name="saved_mean")
+        compressor = tf.Variable(
+            np.zeros((self.n_params, self.n_summaries)),
+            dtype=self._FLOATX,
+            trainable=False,
+            name="compressor")
 
         with tf.variable_scope("IMNN") as scope:
             summary = tf.identity(network(data), name="summary")
             scope.reuse_variables()
-            summary_d = tf.split(tf.reshape(network(tf.reshape(data_d, [-1]
-                                 + self.input_shape)), [-1, self.n_params,
-                                 self.n_summaries], name="summary_d"),
-                                 self.n_summaries, axis=2)
-            dxdd = tf.transpose(tf.stack([tf.gradients(summary_d[i], data_d)[0]
-                                          for i in range(self.n_summaries)]),
-                                (1, 2, 0, 3), name="summary_derivative")
+            summary_d = tf.split(
+                tf.reshape(
+                    network(
+                        tf.reshape(
+                            data_d,
+                            [-1] + self.input_shape)),
+                    [-1, self.n_params, self.n_summaries],
+                    name="summary_d"),
+                self.n_summaries,
+                axis=2)
+            dxdd = tf.transpose(
+                tf.stack([
+                    tf.gradients(summary_d[i], data_d)[0] for
+                    i in range(self.n_summaries)]),
+                (1, 2, 0, 3),
+                name="summary_derivative")
 
-        get_summaries = tf.scatter_update(summaries, index, summary,
-                                          name="get_summaries")
-        get_summaries_d = tf.scatter_update(summaries_d, index,
-                                            tf.einsum("ijkl,ijl->ijk", dxdd,
-                                                      data_d),
-                                            name="get_summaries_d")
+        get_summaries = tf.scatter_update(
+            summaries,
+            index,
+            summary,
+            name="get_summaries")
+        get_summaries_d = tf.scatter_update(
+            summaries_d,
+            index,
+            tf.einsum("ijkl,ijl->ijk", dxdd, data_d),
+            name="get_summaries_d")
 
-        dmudtheta = tf.reduce_mean(summaries_d, axis=0, name="mean_derivative")
-        mu = tf.reduce_mean(summaries, axis=0, keepdims=True, name="mean")
-        diff = tf.subtract(summaries, mu, name="difference_from_mean")
-        cov = tf.divide(tf.einsum("ij,ik->jk", diff, diff), self.n_s - 1.,
-                        name="covariance")
+        dmudtheta = tf.reduce_mean(
+            summaries_d,
+            axis=0,
+            name="mean_derivative")
+        mu = tf.reduce_mean(
+            summaries,
+            axis=0,
+            keepdims=True,
+            name="mean")
+        diff = tf.subtract(
+            summaries,
+            mu,
+            name="difference_from_mean")
+        cov = tf.divide(
+            tf.einsum("ij,ik->jk", diff, diff),
+            self.n_s - 1.,
+            name="covariance")
         inv_cov = tf.linalg.inv(cov, name="inverse_covariance")
-        compression = tf.einsum('ij,kj->ki', inv_cov, dmudtheta,
-                                name="compression")
-        onesided_fisher = tf.matrix_band_part(tf.einsum('ij,kj->ki', dmudtheta,
-                                                        compression),
-                                              0, -1, name="onesided_fisher")
-        calculate_fisher = tf.identity(tf.multiply(0.5, tf.add(onesided_fisher,
-                                       tf.transpose(onesided_fisher))),
-                                       name="fisher")
+        compression = tf.einsum(
+            'ij,kj->ki',
+            inv_cov,
+            dmudtheta,
+            name="compression")
+        onesided_fisher = tf.matrix_band_part(
+            tf.einsum('ij,kj->ki', dmudtheta, compression),
+            0,
+            -1,
+            name="onesided_fisher")
+        calculate_fisher = tf.identity(
+            tf.multiply(
+                0.5,
+                tf.add(
+                    onesided_fisher,
+                    tf.transpose(onesided_fisher))),
+            name="fisher")
         temp_logdetfisher = tf.linalg.slogdet(calculate_fisher)
-        logdetfisher = tf.multiply(temp_logdetfisher[0], temp_logdetfisher[1],
-                                   name="logdetfisher")
-        fisher_gradient = tf.reduce_sum(tf.gradients(-logdetfisher,
-                                                     summaries)[0],
-                                        axis=0, keepdims=True,
-                                        name="fisher_gradient")
+        logdetfisher = tf.multiply(
+            temp_logdetfisher[0],
+            temp_logdetfisher[1],
+            name="logdetfisher")
+        fisher_gradient = tf.reduce_sum(
+            tf.gradients(-logdetfisher, summaries)[0],
+            axis=0,
+            keepdims=True,
+            name="fisher_gradient")
 
         get_fisher = tf.assign(fisher, calculate_fisher, name="get_fisher")
-        get_inverse_fisher = tf.assign(inv_fisher,
-                                       tf.linalg.inv(calculate_fisher),
-                                       name="get_inverse_fisher")
+        get_inverse_fisher = tf.assign(
+            inv_fisher,
+            tf.linalg.inv(calculate_fisher),
+            name="get_inverse_fisher")
         get_mean = tf.assign(mean, mu, name="get_mean")
-        get_compression = tf.assign(compressor, compression,
-                                    name="get_compression")
-        self.get_compressor = [get_fisher, get_inverse_fisher, get_mean,
-                               get_compression]
+        get_compression = tf.assign(
+            compressor,
+            compression,
+            name="get_compression")
+        self.get_compressor = [
+            get_fisher,
+            get_inverse_fisher,
+            get_mean,
+            get_compression]
 
-        MLE = tf.add(fiducial, tf.einsum("ij,kj->ki", inv_fisher,
-                                         tf.einsum("ij,kj->ki", compressor,
-                                                   tf.subtract(summary,
-                                                               mean))),
-                     name="MLE")
+        MLE = tf.add(
+            fiducial,
+            tf.einsum(
+                "ij,kj->ki",
+                inv_fisher,
+                tf.einsum(
+                    "ij,kj->ki",
+                    compressor,
+                    tf.subtract(summary, mean))),
+            name="MLE")
 
         trainer = tf.train.AdamOptimizer(lr)
         gradients = trainer.compute_gradients(input_fisher(summary))
-        self.store_gradients = [tf.Variable(np.zeros(gradients[i][0].shape),
-                                            dtype=self._FLOATX,
-                                            trainable=False,
-                                            name="store_gradients_" + str(i))
-                                for i in range(len(gradients))]
-        self.get_gradients = [tf.assign_add(self.store_gradients[i],
-                                            gradients[i][0],
-                                            name="add_gradients_" + str(i))
-                              for i in range(len(gradients))]
-        self.reset_gradients = [tf.assign(self.store_gradients[i],
-                                          tf.zeros_like(gradients[i][0]),
-                                          name="reset_gradients_" + str(i))
-                                for i in range(len(gradients))]
+        self.store_gradients = [tf.Variable(
+                np.zeros(gradients[i][0].shape),
+                dtype=self._FLOATX,
+                trainable=False,
+                name="store_gradients_" + str(i))
+            for i in range(len(gradients))]
+        self.get_gradients = [tf.assign_add(
+                self.store_gradients[i],
+                gradients[i][0],
+                name="add_gradients_" + str(i))
+            for i in range(len(gradients))]
+        self.reset_gradients = [tf.assign(
+                self.store_gradients[i],
+                tf.zeros_like(gradients[i][0]),
+                name="reset_gradients_" + str(i))
+            for i in range(len(gradients))]
         self.apply_gradients = trainer.apply_gradients([
             (tf.divide(self.store_gradients[i], self.n_s), gradients[i][1])
             for i in range(len(gradients))])
@@ -645,8 +735,7 @@ class IMNN():
                                 num_validation_partial_sims,
                                 data_size, data_d_size)
         updates = positive_integer(updates, key="number of updates")
-        at_once = positive_integer(at_once, key="how many simulations to ⁠pass \
-            at once")
+        at_once = positive_integer(at_once, key="simulations to ⁠pass at once")
         learning_rate = constrained_float(learning_rate, key="learning rate")
 
         training_ind = np.arange(num_sims)
@@ -654,12 +743,12 @@ class IMNN():
 
         if to_test:
             test_indices = np.arange(num_validation_sims) + num_sims
-            test_indices_d = np.arange(num_validation_partial_sims)
-            + num_partial_sims
+            test_indices_d = np.arange(num_validation_partial_sims) \
+                + num_partial_sims
 
         if restart:
-            self.history = {"det F": np.array([]),
-                            "det test F": np.array([])}
+            self.history = {"trace F": np.array([]),
+                            "trace test F": np.array([])}
             self.sess.run(tf.global_variables_initializer())
 
         update_bar = bar(range(updates), desc="Updates")
@@ -667,101 +756,93 @@ class IMNN():
             np.random.shuffle(training_ind)
             np.random.shuffle(training_ind_d)
             for sim in range(0, self.n_s, at_once):
-                current_dictionary = self.get_dictionary(np.arange(sim, min(sim
-                                                                   + at_once,
-                                                                   self.n_s)),
-                                                         data["data"],
-                                                         training_ind,
-                                                         derivative=False)
-                self.sess.run("get_summaries",
-                              feed_dict={**training_dictionary,
-                                         **current_dictionary})
+                current_dictionary = self.get_dictionary(
+                    np.arange(sim, min(sim + at_once, self.n_s)),
+                    data["data"],
+                    training_ind,
+                    derivative=False)
+                self.sess.run(
+                    "get_summaries",
+                    feed_dict={**training_dictionary, **current_dictionary})
             for sim in range(0, self.n_p, at_once):
-                current_dictionary = self.get_dictionary(np.arange(sim, min(sim
-                                                                   + at_once,
-                                                                   self.n_p)),
-                                                         data["data_d"],
-                                                         training_ind_d,
-                                                         derivative=True)
-                self.sess.run("get_summaries_d",
-                              feed_dict={**training_dictionary,
-                                         **current_dictionary})
+                current_dictionary = self.get_dictionary(
+                    np.arange(sim, min(sim + at_once, self.n_p)),
+                    data["data_d"],
+                    training_ind_d,
+                    derivative=True)
+                self.sess.run(
+                    "get_summaries_d",
+                    feed_dict={**training_dictionary, **current_dictionary})
             self.sess.run(self.reset_gradients)
             for sim in range(0, self.n_s, at_once):
-                current_dictionary = self.get_dictionary(np.arange(sim, min(sim
-                                                                   + at_once,
-                                                                   self.n_s)),
-                                                         data["data"],
-                                                         training_ind,
-                                                         derivative=False)
-                self.sess.run(self.get_gradients,
-                              feed_dict={**training_dictionary,
-                                         **current_dictionary})
-            self.sess.run(self.apply_gradients,
-                          feed_dict={"learning_rate:0": learning_rate})
+                current_dictionary = self.get_dictionary(
+                    np.arange(sim, min(sim + at_once, self.n_s)),
+                    data["data"],
+                    training_ind,
+                    derivative=False)
+                self.sess.run(
+                    self.get_gradients,
+                    feed_dict={**training_dictionary, **current_dictionary})
+            self.sess.run(
+                self.apply_gradients,
+                feed_dict={"learning_rate:0": learning_rate})
 
             if get_history:
                 np.random.shuffle(training_ind)
                 np.random.shuffle(training_ind_d)
                 for sim in range(0, self.n_s, at_once):
-                    current_dictionary = self.get_dictionary(np.arange(sim,
-                                                             min(sim + at_once,
-                                                                 self.n_s)),
-                                                             data["data"],
-                                                             training_ind,
-                                                             derivative=False)
-                    self.sess.run("get_summaries",
-                                  feed_dict={**validation_dictionary,
-                                             **current_dictionary})
+                    current_dictionary = self.get_dictionary(
+                        np.arange(sim, min(sim + at_once, self.n_s)),
+                        data["data"],
+                        training_ind,
+                        derivative=False)
+                    self.sess.run(
+                        "get_summaries",
+                        feed_dict={**validation_dictionary,
+                                   **current_dictionary})
                 for sim in range(0, self.n_p, at_once):
-                    current_dictionary = self.get_dictionary(np.arange(sim,
-                                                             min(sim + at_once,
-                                                                 self.n_p)),
-                                                             data["data_d"],
-                                                             training_ind_d,
-                                                             derivative=True)
-                    self.sess.run("get_summaries_d",
-                                  feed_dict={**validation_dictionary,
-                                             **current_dictionary})
-                self.history["det F"] = np.concatenate([self.history["det F"],
-                                                        [np.exp(self.sess
-                                                         .run("logdetfisher:0"
-                                                              ))]])
+                    current_dictionary = self.get_dictionary(
+                        np.arange(sim, min(sim + at_once, self.n_p)),
+                        data["data_d"],
+                        training_ind_d,
+                        derivative=True)
+                    self.sess.run(
+                        "get_summaries_d",
+                        feed_dict={**validation_dictionary,
+                                   **current_dictionary})
+                self.history["det F"] = np.concatenate([
+                    self.history["det F"],
+                    [np.exp(self.sess.run("logdetfisher:0"))]])
 
                 if to_test:
                     np.random.shuffle(test_indices)
                     np.random.shuffle(test_indices_d)
                     for sim in range(0, self.n_s, at_once):
-                        test_dictionary = self.get_dictionary(np.arange(sim,
-                                                              min(sim
-                                                                  + at_once,
-                                                                  self.n_s)
-                                                             ),
-                                                             data["data"],
-                                                             test_indices,
-                                                             derivative=False)
-                        self.sess.run("get_summaries",
-                                      feed_dict={**validation_dictionary,
-                                                 **test_dictionary})
+                        test_dictionary = self.get_dictionary(
+                            np.arange(sim, min(sim + at_once, self.n_s)),
+                            data["data"],
+                            test_indices,
+                            derivative=False)
+                        self.sess.run(
+                            "get_summaries",
+                            feed_dict={**validation_dictionary,
+                                       **test_dictionary})
                     for sim in range(0, self.n_p, at_once):
-                        test_dictionary = self.get_dictionary(np.arange(sim,
-                                                              min(sim
-                                                                  + at_once,
-                                                                  self.n_p)
-                                                                 ),
-                                                              data["data_d"],
-                                                              test_indices_d,
-                                                              derivative=True)
-                        self.sess.run("get_summaries_d",
-                                      feed_dict={**validation_dictionary,
-                                                 **test_dictionary})
-                    self.history["det test F"] = np.concatenate(
-                        [self.history["det test F"], [np.exp(self.sess
-                                                      .run("logdetfisher:0"))]]
-                                                      )
-                    update_bar.set_postfix(F=self.history["det F"][-1],
-                                           validation_F=self
-                                           .history["det test F"][-1])
+                        test_dictionary = self.get_dictionary(
+                            np.arange(sim, min(sim + at_once, self.n_p)),
+                            data["data_d"],
+                            test_indices_d,
+                            derivative=True)
+                        self.sess.run(
+                            "get_summaries_d",
+                            feed_dict={**validation_dictionary,
+                                       **test_dictionary})
+                    self.history["det test F"] = np.concatenate([
+                        self.history["det test F"],
+                        [np.exp(self.sess.run("logdetfisher:0"))]])
+                    update_bar.set_postfix(
+                        F=self.history["det F"][-1],
+                        validation_F=self.history["det test F"][-1])
                 else:
                     update_bar.set_postfix(F=self.history["det F"][-1])
 

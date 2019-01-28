@@ -5,7 +5,7 @@ calculate the probability distribution function value when doing ABC with IMNN.
 """
 
 
-__version__ = '0.1dev5'
+__version__ = '0.1dev6'
 __author__ = "Justin Alsing and Tom Charnock"
 
 
@@ -165,8 +165,10 @@ class TruncatedGaussian():
         kept = 0
         change_ind = np.arange(self.mean.shape[0]).astype(np.int)
         while kept < self.mean.shape[0]:
-            cov = np.random.normal(0, 1, (change_ind.shape[0],
-                                          self.mean.shape[1]))
+            cov = np.random.normal(
+                0,
+                1,
+                (change_ind.shape[0], self.mean.shape[1]))
             x = self.mean[change_ind] + np.dot(cov, self.L)
             up = x <= self.upper[np.newaxis, :]
             down = x >= self.lower[np.newaxis, :]
@@ -174,7 +176,8 @@ class TruncatedGaussian():
             kept += keep_ind.shape[0]
             if keep_ind.shape[0] > 0:
                 x_keep[keep_ind] = x[keep_ind]
-                change_ind = change_ind[np.isin(change_ind, keep_ind,
+                change_ind = change_ind[np.isin(change_ind,
+                                                keep_ind,
                                                 invert=True)]
         return x_keep
 
@@ -192,6 +195,8 @@ class TruncatedGaussian():
         ndarray
             the value of the probability distribution
         """
-        return self.uniform(x) * multivariate_normal.pdf(x,
-                                                         mean=self.mean,
-                                                         cov=self.C)
+        return self.uniform(x) \
+            * multivariate_normal.pdf(
+                x,
+                mean=self.mean,
+                cov=self.C)

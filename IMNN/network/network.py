@@ -7,7 +7,7 @@ certainly get better results.
 """
 
 
-__version__ = "0.1dev5"
+__version__ = "0.1dev6"
 __author__ = "Tom Charnock"
 
 
@@ -20,9 +20,9 @@ class network():
     """
 
     def __init__(self, parameters):
-        self.layers =
-        self.bb =
-        self.activation =
+        self.layers = parameters["hidden_layers"]
+        self.bb = parameters["bb"]
+        self.activation = parameters["activation"]
 
     def dense(self, input_tensor, l):
         """Builds a dense layer

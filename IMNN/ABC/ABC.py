@@ -5,7 +5,7 @@ the IMNN.
 """
 
 
-__version__ = '0.1dev5'
+__version__ = '0.1dev6'
 __author__ = "Tom Charnock"
 
 
@@ -85,20 +85,16 @@ class ABC():
         self.n_summaries = self.summary.shape[-1]
         self.n_params = self.fisher.shape[0]
         self.dictionary = dictionary
-        self.ABC_dict = {"parameters": np.array([
-                            ]).reshape((0, self.n_params)),
-                         "summaries": np.array([
-                            ]).reshape((0, self.n_summaries)),
-                         "differences": np.array([
-                            ]).reshape((0, self.n_summaries)),
-                         "distances": np.array([])}
-        self.PMC_dict = {"parameters": np.array([
-                    ]).reshape((0, self.n_params)),
-                 "summaries": np.array([
-                    ]).reshape((0, self.n_summaries)),
-                 "differences": np.array([
-                    ]).reshape((0, self.n_summaries)),
-                 "distances": np.array([])}
+        self.ABC_dict = {
+            "parameters": np.array([]).reshape((0, self.n_params)),
+            "summaries": np.array([]).reshape((0, self.n_summaries)),
+            "differences": np.array([]).reshape((0, self.n_summaries)),
+            "distances": np.array([])}
+        self.PMC_dict = {
+            "parameters": np.array([]).reshape((0, self.n_params)),
+            "summaries": np.array([]).reshape((0, self.n_summaries)),
+            "differences": np.array([]).reshape((0, self.n_summaries)),
+            "distances": np.array([])}
         self.total_draws = 0
 
     def ABC(self, draws, at_once=True, save_sims=None, return_dict=False,
@@ -160,8 +156,8 @@ class ABC():
             if save_sims is not None:
                 np.savez(save_sims + ".npz", sims)
             summaries = self.sess.run(
-                "IMNN/summary:0", feed_dict={**self.dictionary,
-                                             **{"data:0": sims}})
+                "IMNN/summary:0",
+                feed_dict={**self.dictionary, **{"data:0": sims}})
         else:
             summaries = np.zeros([draws, self.n_summaries])
             for theta in bar(range(draws), desc="Simulations"):
@@ -173,10 +169,14 @@ class ABC():
                     feed_dict={**self.dictionary, **{"data:0": sim}})[0]
 
         differences = summaries - self.summary
-        distances = np.sqrt(np.einsum('ij,ij->i',
-                                      differences,
-                                      np.einsum('jk,ik->ij',
-                                                self.fisher, differences)))
+        distances = np.sqrt(
+            np.einsum(
+                'ij,ij->i',
+                differences,
+                np.einsum(
+                    'jk,ik->ij',
+                    self.fisher,
+                    differences)))
 
         if return_dict:
             return {"parameters": parameters,
@@ -305,8 +305,10 @@ class ABC():
         criterion_reached = 1e10
         while criterion < criterion_reached:
             draws = 0
-            cov = np.cov(self.PMC_dict["parameters"], aweights=weighting,
-                         rowvar=False)
+            cov = np.cov(
+                self.PMC_dict["parameters"],
+                aweights=weighting,
+                rowvar=False)
             if self.n_summaries == 1:
                 cov = np.array([[cov]])
             epsilon = np.percentile(self.PMC_dict["distances"], 75)
@@ -315,22 +317,25 @@ class ABC():
                 self.PMC_dict["distances"] >= epsilon)[0]
             move_ind = np.arange(stored_move_ind.shape[0])
             current_draws = move_ind.shape[0]
-            accepted_parameters = np.zeros((stored_move_ind.shape[0],
-                                            self.n_params))
+            accepted_parameters = np.zeros(
+                (stored_move_ind.shape[0], self.n_params))
             accepted_distances = np.zeros((stored_move_ind.shape[0]))
-            accepted_summaries = np.zeros((stored_move_ind.shape[0],
-                                           self.n_summaries))
-            accepted_differences = np.zeros((stored_move_ind.shape[0],
-                                             self.n_summaries))
+            accepted_summaries = np.zeros(
+                (stored_move_ind.shape[0], self.n_summaries))
+            accepted_differences = np.zeros(
+                (stored_move_ind.shape[0], self.n_summaries))
             while current_draws > 0:
                 draws += current_draws
                 proposed_parameters = TruncatedGaussian(
                     self.PMC_dict["parameters"][stored_move_ind[move_ind]],
-                    cov, self.prior.lower, self.prior.upper).pmc_draw()
-                temp_dictionary = self.ABC(proposed_parameters,
-                                           at_once=at_once,
-                                           save_sims=save_sims,
-                                           return_dict=True, PMC=True)
+                    cov,
+                    self.prior.lower,
+                    self.prior.upper).pmc_draw()
+                temp_dictionary = self.ABC(
+                    proposed_parameters,
+                    at_once=at_once,
+                    save_sims=save_sims,
+                    return_dict=True, PMC=True)
                 accept_index = np.where(
                     temp_dictionary["distances"] <= epsilon)[0]
                 reject_index = np.where(
@@ -350,8 +355,14 @@ class ABC():
             dist = np.ones_like(weighting)
             diff = accepted_parameters \
                 - self.PMC_dict["parameters"][stored_move_ind]
-            dist[stored_move_ind] = np.exp(-0.5 * np.einsum(
-                "ij,ij->i", np.einsum("ij,jk->ik", diff, inv_cov), diff)) \
+            dist[stored_move_ind] = np.exp(
+                -0.5 * np.einsum(
+                    "ij,ij->i",
+                    np.einsum(
+                        "ij,jk->ik",
+                        diff,
+                        inv_cov),
+                    diff)) \
                 / np.sqrt(2. * np.pi * np.linalg.det(cov))
             self.PMC_dict["parameters"][stored_move_ind] = accepted_parameters
             self.PMC_dict["distances"][stored_move_ind] = accepted_distances
@@ -418,16 +429,18 @@ class ABC():
             the grid at which the approximate posterior distribution is
             evaluated.
         """
-        parameters = [np.linspace(self.prior.lower[i], self.prior.upper[i],
-                                  gridsize)
-                      for i in range(self.n_params)]
-        grid = np.array(np.meshgrid(*parameters))
+        parameters = [np.linspace(
+                self.prior.lower[i],
+                self.prior.upper[i],
+                gridsize)
+            for i in range(self.n_params)]
+        grid = np.array(np.meshgrid(*parameters, indexing="ij"))
 
         dx = []
         ind = np.zeros(self.n_params).astype(np.int).tolist()
         for i in range(self.n_params):
             new_ind = np.copy(ind).tolist()
-            new_ind[self.n_params - 1 - i] = 1
+            new_ind[i] = 1
             dx.append(grid[tuple([i] + new_ind)] - grid[tuple([i] + ind)])
 
         dx = np.prod(dx)
