@@ -637,7 +637,7 @@ class IMNN():
         else:
             data_size = tf.get_default_graph(
                 ).get_tensor_by_name("stored_data:0").get_shape()[0]
-	    data_d_size = 
+            data_d_size =
             tf.get_default_graph(
                 ).get_tensor_by_name("stored_data_d:0").get_shape()[0]
 
