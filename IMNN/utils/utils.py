@@ -7,7 +7,7 @@ to be checked.
 """
 
 
-__version__ = '0.1dev6'
+__version__ = '0.1rc1'
 __author__ = "Tom Charnock"
 
 

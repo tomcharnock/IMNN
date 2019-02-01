@@ -5,7 +5,7 @@ calculate the probability distribution function value when doing ABC with IMNN.
 """
 
 
-__version__ = '0.1dev6'
+__version__ = '0.1rc1'
 __author__ = "Justin Alsing and Tom Charnock"
 
 

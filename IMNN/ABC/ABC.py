@@ -5,7 +5,7 @@ the IMNN.
 """
 
 
-__version__ = '0.1dev6'
+__version__ = '0.1rc1'
 __author__ = "Tom Charnock"
 
 
@@ -89,16 +89,18 @@ class ABC():
             "parameters": np.array([]).reshape((0, self.n_params)),
             "summaries": np.array([]).reshape((0, self.n_summaries)),
             "differences": np.array([]).reshape((0, self.n_summaries)),
-            "distances": np.array([])}
+            "distances": np.array([]),
+            "MLE": np.array([]).reshape((0, self.n_params))}
         self.PMC_dict = {
             "parameters": np.array([]).reshape((0, self.n_params)),
             "summaries": np.array([]).reshape((0, self.n_summaries)),
             "differences": np.array([]).reshape((0, self.n_summaries)),
-            "distances": np.array([])}
+            "distances": np.array([]),
+            "MLE": np.array([]).reshape((0, self.n_params))}
         self.total_draws = 0
 
     def ABC(self, draws, at_once=True, save_sims=None, return_dict=False,
-            PMC=False):
+            PMC=False, MLE=False):
         """Approximate Bayesian computation
 
         Here we draw some parameter values from the prior supplied to the class
@@ -127,6 +129,8 @@ class ABC():
         PMC : bool, optional
             if this is true then the parameters are passed directly to ABC
             rather than being drawn in the ABC. this is used by the PMC.
+        MLE : bool, optional
+            collect the maximum likelihood estimate if True
         bar : func
             the function for the progress bar. this must be different depending
             on whether this is run in a notebook or not.
@@ -158,8 +162,14 @@ class ABC():
             summaries = self.sess.run(
                 "IMNN/summary:0",
                 feed_dict={**self.dictionary, **{"data:0": sims}})
+            if MLE:
+                MLEs = self.sess.run(
+                    "MLE:0",
+                    feed_dict={**self.dictionary, **{"data:0": sims}})
         else:
             summaries = np.zeros([draws, self.n_summaries])
+            if MLE:
+                MLEs = np.zeros([draws, self.n_params])
             for theta in bar(range(draws), desc="Simulations"):
                 sim = self.simulator([parameters[theta]])
                 if save_sims is not None:
@@ -167,6 +177,10 @@ class ABC():
                 summaries[theta] = self.sess.run(
                     "IMNN/summary:0",
                     feed_dict={**self.dictionary, **{"data:0": sim}})[0]
+                if MLE:
+                    MLEs[theta] = self.sess.run(
+                        "MLE:0",
+                        feed_dict={**self.dictionary, **{"data:0": sim}})[0]
 
         differences = summaries - self.summary
         distances = np.sqrt(
@@ -179,10 +193,13 @@ class ABC():
                     differences)))
 
         if return_dict:
-            return {"parameters": parameters,
-                    "summaries": summaries,
-                    "differences": differences,
-                    "distances": distances}
+            ABC_dict = {"parameters": parameters,
+                        "summaries": summaries,
+                        "differences": differences,
+                        "distances": distances}
+            if MLE:
+                ABC_dict["MLE"] = MLEs
+            return ABC_dict
         else:
             self.ABC_dict["parameters"] = np.concatenate(
                 [self.ABC_dict["parameters"], parameters])
@@ -192,9 +209,12 @@ class ABC():
                 [self.ABC_dict["differences"], differences])
             self.ABC_dict["distances"] = np.concatenate(
                 [self.ABC_dict["distances"], distances])
+            if MLE:
+                self.ABC_dict["MLE"] = np.concatenate(
+                    [self.ABC_dict["MLE"], MLEs])
 
     def PMC(self, draws, posterior, criterion, at_once=True, save_sims=None,
-            restart=False):
+            restart=False, MLE=False):
         """Population Monte Carlo
 
         This is the population Monte Carlo sequential ABC method, highly
@@ -238,6 +258,8 @@ class ABC():
             the PMC just carries on from where it last left off. note that the
             weighting is reset, but it should level itself out after the first
             iteration.
+        MLE : bool, optional
+            collect the maximum likelihood estimate if True
         iteration : int
             counter for the number of iterations of the PMC to convergence.
         criterion_reached : float
@@ -288,7 +310,8 @@ class ABC():
         """
         if self.total_draws == 0 or restart:
             self.PMC_dict = self.ABC(draws, at_once=at_once,
-                                     save_sims=save_sims, return_dict=True)
+                                     save_sims=save_sims, return_dict=True,
+                                     MLE=MLE)
             inds = self.PMC_dict["distances"].argsort()
             self.PMC_dict["parameters"] = self.PMC_dict[
                 "parameters"][inds[:posterior]]
@@ -298,6 +321,8 @@ class ABC():
                 "differences"][inds[:posterior]]
             self.PMC_dict["distances"] = self.PMC_dict[
                 "distances"][inds[:posterior]]
+            if MLE:
+                self.PMC_dict["MLE"] = self.PMC_dict["MLE"][inds[:posterior]]
             self.total_draws = 0
 
         weighting = np.ones(posterior) / posterior
@@ -324,6 +349,9 @@ class ABC():
                 (stored_move_ind.shape[0], self.n_summaries))
             accepted_differences = np.zeros(
                 (stored_move_ind.shape[0], self.n_summaries))
+            if MLE:
+                accepted_MLE = np.zeros(
+                    (stored_move_ind.shape[0], self.n_params))
             while current_draws > 0:
                 draws += current_draws
                 proposed_parameters = TruncatedGaussian(
@@ -335,7 +363,7 @@ class ABC():
                     proposed_parameters,
                     at_once=at_once,
                     save_sims=save_sims,
-                    return_dict=True, PMC=True)
+                    return_dict=True, PMC=True, MLE=MLE)
                 accept_index = np.where(
                     temp_dictionary["distances"] <= epsilon)[0]
                 reject_index = np.where(
@@ -348,6 +376,9 @@ class ABC():
                     temp_dictionary["summaries"][accept_index]
                 accepted_differences[move_ind[accept_index]] = \
                     temp_dictionary["differences"][accept_index]
+                if MLE:
+                    accepted_MLE[move_ind[accept_index]] = \
+                        temp_dictionary["MLE"][accept_index]
                 move_ind = move_ind[reject_index]
                 current_draws = move_ind.shape[0]
 
@@ -369,6 +400,8 @@ class ABC():
             self.PMC_dict["summaries"][stored_move_ind] = accepted_summaries
             self.PMC_dict["differences"][stored_move_ind] = \
                 accepted_differences
+            if MLE:
+                self.PMC_dict["MLE"][stored_move_ind] = accepted_MLE
             weighting = self.prior.pdf(self.PMC_dict["parameters"]) \
                 / np.sum(weighting * dist)
             criterion_reached = posterior / draws
@@ -446,6 +479,7 @@ class ABC():
         dx = np.prod(dx)
         span = tuple([...] + [np.newaxis for i in range(self.n_params)])
         diff = self.MLE[0][span] - grid
+
         fisher_string = "ij"
         grid_string = ""
         for i in range(self.n_params):
@@ -455,6 +489,7 @@ class ABC():
             + grid_string[::-1]
         posterior = np.exp(-0.5 * np.einsum(
             second_string, diff, np.einsum(
-                first_string, self.sess.run("inverse_fisher:0"), diff)) - 0.5
-            * np.log(2. * np.pi * np.linalg.det(self.sess.run("fisher:0"))))
+                first_string, self.sess.run("fisher:0"), diff)) - 0.5
+            * np.log(2. * np.pi * np.linalg.det(
+                self.sess.run("inverse_fisher:0"))))
         return posterior / np.sum(dx * posterior), grid

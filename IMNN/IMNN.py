@@ -6,7 +6,7 @@ model parameters.
 """
 
 
-__version__ = '0.1dev6'
+__version__ = '0.1rc1'
 __author__ = "Tom Charnock"
 
 
@@ -45,17 +45,34 @@ class IMNN():
     filename : {None, str}
         filename for saving and loading network.
     history : dict
-        history object for saving training data.
+        history object for saving training statistics.
+    diagnostics : dict
+        a dictionary for saving weights, gradients and covariances during
+        training.
     sess : objTF
         TF session for evaluating graph members.
     saver : objTF
         TF saver for saving the graph to file.
     load_data : bool
         switch for preloading data into TF tensor.
+    validate : bool
+        switch for defining a validation network if preloading the data.
     get_compressor : list of opTF
         set of operations allowing the compression function to be defined.
+    gradients : list of tuples of tensorTF_float
+        the set of tensors containing gradients and their corresponding
+        variables with respect to the summaries.
+    gradients_d : list of tuples of tensorTF_float
+        the set of tensors containing gradients and their corresponding
+        variables with respect to the derivative of the summaries.
     store_gradients : list of tensorTF_float
         set of operations allowing gradients to be added to sequentially.
+    get_gradients : list of opTF
+        set of operations to add calculated gradients with respect to the
+        summaries to the stored gradients
+    get_gradients_d : list of opTF
+        set of operations to add calculated gradients with respect to the
+        derivative of the summaries to the stored gradients
     reset_gradients : list of opTF
         set of operations to reset stored gradient values to zero.
     apply_gradients : opTF
@@ -100,13 +117,24 @@ class IMNN():
         self.input_shape = loaded_parameters["input_shape"]
         self.filename = loaded_parameters["filename"]
 
-        self.history = {"det F": np.array([]), "det test F": np.array([])}
+        self.history = {"det F": np.array([]),
+                        "det test F": np.array([]),
+                        "loss": np.array([]),
+                        "test loss": np.array([])}
+        self.diagnostics = {"det C": np.array([]),
+                            "det test C": np.array([]),
+                            "weights": np.array([]),
+                            "gradients": np.array([]),
+                            "fisher gradient": np.array([
+                                ]).reshape((0, self.n_s, self.n_summaries))}
         self.sess = None
         self.saver = None
         self.load_data = None
+        self.validate = None
         self.get_compressor = None
         self.store_gradients = None
         self.get_gradients = None
+        self.gradients_d = None
         self.reset_gradients = None
         self.apply_gradients = None
 
@@ -173,8 +201,12 @@ class IMNN():
                 self.saver.save(self.sess, "./" + savefile)
                 np.savez(
                     "./" + savefile + ".npz",
+                    gradients=[i[0].name for i in self.gradients],
+                    gradients_d=[i[0].name for i in self.gradients_d],
+                    weights=[i[1].name for i in self.gradients],
                     store_gradients=[i.name for i in self.store_gradients],
                     get_gradients=[i.name for i in self.get_gradients],
+                    get_gradients_d=[i.name for i in self.get_gradients_d],
                     reset_gradients=[i.name for i in self.reset_gradients],
                     apply_gradients=[self.apply_gradients.name])
             else:
@@ -211,12 +243,27 @@ class IMNN():
                     ).get_tensor_by_name("get_inverse_fisher:0"),
                 tf.get_default_graph().get_tensor_by_name("get_mean:0"),
                 tf.get_default_graph().get_tensor_by_name("get_compression:0")]
+            self.gradients = [(
+                tf.get_default_graph(
+                    ).get_tensor_by_name(load_arrays["gradients"][i]),
+                tf.get_default_graph(
+                    ).get_tensor_by_name(load_arrays["weights"][i]))
+                for i in range(len(load_arrays["gradients"]))]
+            self.gradients_d = [(
+                tf.get_default_graph(
+                    ).get_tensor_by_name(load_arrays["gradients_d"][i]),
+                tf.get_default_graph(
+                    ).get_tensor_by_name(load_arrays["weights"][i]))
+                for i in range(len(load_arrays["gradients_d"]))]
             self.store_gradients = [
                 tf.get_default_graph().get_tensor_by_name(i) for
                 i in load_arrays["store_gradients"]]
             self.get_gradients = [
                 tf.get_default_graph().get_tensor_by_name(i) for
                 i in load_arrays["get_gradients"]]
+            self.get_gradients_d = [
+                tf.get_default_graph().get_tensor_by_name(i) for
+                i in load_arrays["get_gradients_d"]]
             self.reset_gradients = [
                 tf.get_default_graph().get_tensor_by_name(i) for
                 i in load_arrays["reset_gradients"]]
@@ -306,6 +353,17 @@ class IMNN():
             either a placeholder for the derivative of the data to calculate
             the derivative of the mean or a sliced object in the graph of the
             derivative of the data to calculate the derivative of the mean.
+        stored_validation_data : tensorTF_float
+            variable tensor storing the validation data in the TF graph.
+        stored_validation_data_d : tensorTF_float
+            variable tensor storing the derivative of the validation data in
+            the TF graph.
+        validation_data : tensorTF_float
+            a sliced object in the graph of the validation data to pass through
+            the network.
+        validation_data_d : tensorTF_float
+            a sliced object in the graph of the derivative of the validation
+            data to calculate the derivative of the mean.
         index : tensorTF_int
             placeholder of the index at which to insert the calculated summary
             in the stored summaries variable.
@@ -330,8 +388,25 @@ class IMNN():
         compressor : tensorTF_float
             stored derivative of the mean and inverse covariance vector for
             compression of the summary.
+        network_output : tensorTF_float
+            output tensor from the neural network
         summary : tensorTF_float
-            output tensor from the neural network.
+            named output tensor from the neural network.
+        split_summary : list of tensorTF_float
+            the network summaries split along the summary axis into a list so
+            that each dimension can be differentiated
+        transpose_indices : list of int
+            indices describing the position of the input shape of the network
+            for transposing the stacked list of derivatives
+        data_indices : str
+            string of the index labels for the input shape for Einstein
+            summation computation
+        summary_index : str
+            string of the index labels for the summary axis for Einstein
+            summation computation
+        parameter_index : str
+            string of the index labels for the model parameter axis for
+            Einstein summation computation
         summary_d : tensorTF_float
             output tensor from the neural network (from a set of summaries used
             only to calculate the gradient of the network with respect to the
@@ -344,6 +419,24 @@ class IMNN():
         get_summaries_d : opTF
             operation for placing the calculated derivative of the summaries
             with respect to the model parameters into indexed storage.
+        validation_summary : tensorTF_float
+            output tensor from the neural network for validation input.
+        split_validation_summary : list of tensorTF_float
+            the network summaries for validation split along the summary axis
+            into a list so that each dimension can be differentiated
+        validation_dxdd : tensorTF_float
+            derivative of the network summary with respect to the input
+            validation data.
+        validation_summary_d : tensorTF_float
+            output tensor from the neural network (from a set of summaries used
+            only to calculate the gradient of the network with respect to the
+            validation data).
+        get_validation_summaries : opTF
+            operation for placing calculated validation summaries into indexed
+            storage slices for the validation summaries.
+        get_validation_summaries_d : opTF
+            operation for placing the calculated derivative of the validation
+            summaries with respect to the model parameters into indexed storage
         dmudtheta : tensorTF_float
             derivative of the mean with respect to model parameters.
         mu : tensorTF_float
@@ -369,9 +462,21 @@ class IMNN():
             the sign and value of the log determinant of the Fisher matrix.
         logdetfisher : tensorTF_float
             the log determinant of the Fisher information matrix.
+        square_norm : tensorTF_float
+            the sum of the square of the difference between the covariance and
+            the identity for constrained regularisation of the training
+        coupling : tensorTF_float
+            the strength of the regulariser which should be set depending on
+            the value of the fisher information
+        loss : tensorTF_float
+            the regularised negative log determinant of the fisher information
         fisher_gradient : tensorTF_float
-            the calculated gradient of the log determinant of the Fisher
-            information matrix with respect to the network outputs.
+            the calculated gradient of the loss function with respect to the
+            network outputs.
+        fisher_gradient_d : tensorTF_float
+            the calculated gradient of the loss function with respect to the
+            derivative of the network outputs with respect to the model
+            parameters.
         get_fisher : opTF
             operation to store the value of the Fisher information matrix from
             the stored summaries and derivative of the summaries.
@@ -391,11 +496,17 @@ class IMNN():
         gradients : list of tuple of tensorTF_float
             the calculated gradients of the weights and biases of the networks
             for the backpropagation.
+        gradients_d : list of tuples of tensorTF_float
+            the set of tensors containing gradients and their corresponding
+            variables with respect to the derivative of the summaries.
         store_gradients : list of tensorTF_float
             a list of tensors with which to store the accumulated gradients.
         get_gradients : list of opTF
             a list of operations to grab the value of the gradients given some
             forward passes of the data.
+        get_gradients_d : list of opTF
+            set of operations to add calculated gradients with respect to the
+            derivative of the summaries to the stored gradients
         reset_gradients : list of opTF
             a list of operations to set the value of the accumulated gradients
             to zero.
@@ -417,10 +528,6 @@ class IMNN():
                 dtype=self._INTX,
                 shape=(None, 1),
                 name="data_ind")
-            data_d_ind = tf.placeholder(
-                dtype=self._INTX,
-                shape=(None, 1),
-                name="data_d_ind")
             stored_data = tf.Variable(
                 load_data["data"],
                 dtype=self._FLOATX,
@@ -437,8 +544,31 @@ class IMNN():
                 name="data")
             data_d = tf.gather_nd(
                 stored_data_d,
-                data_d_ind,
+                data_ind,
                 name="data_d")
+            if "validation_data" in load_data.keys() \
+                    and "validation_data_d" in load_data.keys():
+                self.validate = True
+                stored_validation_data = tf.Variable(
+                    load_data["validation_data"],
+                    dtype=self._FLOATX,
+                    trainable=False,
+                    name="stored_validation_data")
+                stored_validation_data_d = tf.Variable(
+                    load_data["validation_data_d"],
+                    dtype=self._FLOATX,
+                    trainable=False,
+                    name="stored_validation_data_d")
+                validation_data = tf.gather_nd(
+                    stored_validation_data,
+                    data_ind,
+                    name="validation_data")
+                validation_data_d = tf.gather_nd(
+                    stored_validation_data_d,
+                    data_ind,
+                    name="validation_data_d")
+            else:
+                self.validate = False
         else:
             data = tf.placeholder(
                 dtype=self._FLOATX,
@@ -448,6 +578,7 @@ class IMNN():
                 dtype=self._FLOATX,
                 shape=[None, self.n_params] + self.input_shape,
                 name="data_d")
+            self.validate = True
 
         index = tf.placeholder(
             dtype=self._INTX,
@@ -492,24 +623,28 @@ class IMNN():
             name="compressor")
 
         with tf.variable_scope("IMNN") as scope:
-            summary = tf.identity(network(data), name="summary")
+            network_output = network(data)
+            summary = tf.identity(network_output, name="summary")
             scope.reuse_variables()
-            summary_d = tf.split(
-                tf.reshape(
-                    network(
-                        tf.reshape(
-                            data_d,
-                            [-1] + self.input_shape)),
-                    [-1, self.n_params, self.n_summaries],
-                    name="summary_d"),
-                self.n_summaries,
-                axis=2)
+            split_summary = tf.split(
+                network_output, self.n_summaries, axis=1, name="split_summary")
+            transpose_indices = [1]
+            data_indices = ""
+            for i in range(len(self.input_shape)):
+                data_indices += chr(ord("j") + i)
+                transpose_indices.append(i + 2)
+            summary_index = chr(ord(data_indices[-1]) + 1)
+            parameter_index = chr(ord(summary_index) + 1)
             dxdd = tf.transpose(
-                tf.stack([
-                    tf.gradients(summary_d[i], data_d)[0] for
-                    i in range(self.n_summaries)]),
-                (1, 2, 0, 3),
-                name="summary_derivative")
+                tf.stack(
+                    [tf.gradients(split_summary[i], data)[0]
+                     for i in range(self.n_summaries)]),
+                transpose_indices + [0], name="dxdd")
+            summary_d = tf.einsum(
+                "i" + data_indices + summary_index + ","
+                + "i" + parameter_index + data_indices
+                + "->" + "i" + parameter_index + summary_index,
+                dxdd, data_d, name="summary_d")
 
         get_summaries = tf.scatter_update(
             summaries,
@@ -519,8 +654,52 @@ class IMNN():
         get_summaries_d = tf.scatter_update(
             summaries_d,
             index,
-            tf.einsum("ijkl,ijl->ijk", dxdd, data_d),
+            summary_d,
             name="get_summaries_d")
+
+        if self.validate:
+            if self.load_data:
+                with tf.variable_scope("IMNN") as scope:
+                    scope.reuse_variables()
+                    validation_summary = tf.identity(
+                        network(validation_data),
+                        name="validation_summary")
+                    split_validation_summary = tf.split(
+                        validation_summary,
+                        self.n_summaries,
+                        axis=1,
+                        name="split_validation_summary")
+                    validation_dxdd = tf.transpose(
+                        tf.stack(
+                            [tf.gradients(split_validation_summary[i],
+                                          validation_data)[0]
+                             for i in range(self.n_summaries)]),
+                        transpose_indices + [0],
+                        name="validation_dxdd")
+                    validation_summary_d = tf.einsum(
+                        "i" + data_indices + summary_index + ","
+                        + "i" + parameter_index + data_indices
+                        + "->" + "i" + parameter_index + summary_index,
+                        validation_dxdd,
+                        validation_data_d,
+                        name="validation_summary_d")
+            else:
+                with tf.variable_scope("IMNN") as scope:
+                    validation_summary = tf.identity(summary,
+                                                     name="validation_summary")
+                validation_summary_d = tf.identity(summary_d,
+                                                   name="validation_summary_d")
+
+            get_validation_summaries = tf.scatter_update(
+                summaries,
+                index,
+                validation_summary,
+                name="get_validation_summaries")
+            get_validation_summaries_d = tf.scatter_update(
+                summaries_d,
+                index,
+                validation_summary_d,
+                name="get_validation_summaries_d")
 
         dmudtheta = tf.reduce_mean(
             summaries_d,
@@ -562,11 +741,28 @@ class IMNN():
             temp_logdetfisher[0],
             temp_logdetfisher[1],
             name="logdetfisher")
-        fisher_gradient = tf.reduce_sum(
-            tf.gradients(-logdetfisher, summaries)[0],
-            axis=0,
-            keepdims=True,
+        square_norm = tf.reduce_sum(
+            tf.square(
+                tf.subtract(
+                    cov,
+                    tf.eye(self.n_summaries))),
+            name="square_norm_covariance")
+        coupling = tf.placeholder(
+            dtype=self._FLOATX,
+            shape=(),
+            name="coupling")
+        loss = tf.subtract(
+            tf.multiply(coupling, square_norm), logdetfisher, name="loss")
+        fisher_gradient = tf.identity(
+            tf.gradients(
+                loss,
+                summaries)[0],
             name="fisher_gradient")
+        fisher_gradient_d = tf.identity(
+            tf.gradients(
+                loss,
+                summaries_d)[0],
+            name="fisher_gradient_d")
 
         get_fisher = tf.assign(fisher, calculate_fisher, name="get_fisher")
         get_inverse_fisher = tf.assign(
@@ -595,34 +791,50 @@ class IMNN():
                     tf.subtract(summary, mean))),
             name="MLE")
 
-        trainer = tf.train.AdamOptimizer(lr)
-        gradients = trainer.compute_gradients(input_fisher(summary))
+        trainer = tf.train.GradientDescentOptimizer(lr)
+        self.gradients = trainer.compute_gradients(input_fisher(summary))
         self.store_gradients = [tf.Variable(
-                np.zeros(gradients[i][0].shape),
+                np.zeros(self.gradients[i][0].shape),
                 dtype=self._FLOATX,
                 trainable=False,
                 name="store_gradients_" + str(i))
-            for i in range(len(gradients))]
+                for i in range(len(self.gradients))]
         self.get_gradients = [tf.assign_add(
                 self.store_gradients[i],
-                gradients[i][0],
+                self.gradients[i][0],
                 name="add_gradients_" + str(i))
-            for i in range(len(gradients))]
+            for i in range(len(self.gradients))]
+        self.gradients_d = trainer.compute_gradients(input_fisher_d(summary_d))
+        self.get_gradients_d = [tf.assign_add(
+                self.store_gradients[i],
+                self.gradients_d[i][0],
+                name="add_gradients_d_" + str(i))
+            for i in range(len(self.gradients_d))]
+
+        self.diagnostics["weights"] = [
+            np.array([]).reshape(
+                [0] + self.store_gradients[i].get_shape().as_list())
+            for i in range(len(self.store_gradients))]
+        self.diagnostics["gradients"] = [
+            np.array([]).reshape(
+                [0] + self.store_gradients[i].get_shape().as_list())
+            for i in range(len(self.store_gradients))]
+
         self.reset_gradients = [tf.assign(
                 self.store_gradients[i],
-                tf.zeros_like(gradients[i][0]),
+                tf.zeros_like(self.gradients[i][0]),
                 name="reset_gradients_" + str(i))
-            for i in range(len(gradients))]
+            for i in range(len(self.gradients))]
         self.apply_gradients = trainer.apply_gradients([
-            (tf.divide(self.store_gradients[i], self.n_s), gradients[i][1])
-            for i in range(len(gradients))])
+            (self.store_gradients[i], self.gradients[i][1])
+            for i in range(len(self.store_gradients))])
         self.begin_session()
 
     def train(
-            self, updates, at_once, learning_rate, num_sims, num_partial_sims,
-            num_validation_sims, num_validation_partial_sims,
+            self, updates, at_once, learning_rate, constraint_strength=2.,
             training_dictionary={}, validation_dictionary={}, get_history=True,
-            data={"data": None, "data_d": None}, restart=False):
+            data={"data": None, "data_d": None}, restart=False,
+            diagnostics=False):
         """Training function for the information maximising neural networks
 
         This function takes in the data and derivative of the data with respect
@@ -653,16 +865,8 @@ class IMNN():
             number of simulations to pass through the network at one time.
         learning_rate: float
             the learning rate for the Adam optimiser.
-        num_sims : int
-            number of simulations to preload to tensor/pass for training.
-        num_partial_sims : int
-            number of simulations for mean derivative to preload to tensor/
-            pass for training.
-        num_validation_sims : int
-            number of simulations to preload to tensor/pass for validation.
-        num_validation_partial_sims : int
-            number of simulations for mean derivative to preload to tensor/
-            pass for validation.
+        constraint_strength : float, optional
+            the strength of the regulariser
         training_dictionary : dict, optional
             a dictionary for any tensors which need to be passed to the graph
             during training with custom architectures.
@@ -678,26 +882,30 @@ class IMNN():
         restart : bool, optional
             a switch whether to reinitialise the network and train from scratch
             or not.
+        diagnostics : bool, optional
+            a switch whether to collect diagnostics such as the covariance,
+            the weights and their gradients during training. Having this
+            switched on will slow down training.
         bar : func
             the function for the progress bar. this must be different depending
             on whether this is run in a notebook or not.
-        data_size : int
-            the total amount of data, this must be able to be split into number
-            of training simulations and number of validation simulations.
-        data_d_size : int
-            the total amount of derivatives of the data, this must be able to
-            be split into the number of training derivatives and validation
-            simulations.
-        to_test : bool
-            if the number of validation simulations is correct then allow
-            validation.
+        num_sims : int
+            number of simulations to preload to tensor/pass for training.
+        num_partial_sims : int
+            number of simulations for mean derivative to preload to tensor/
+            pass for training.
+        num_validation_sims : int
+            number of simulations to preload to tensor/pass for validation.
+        num_validation_partial_sims : int
+            number of simulations for mean derivative to preload to tensor/
+            pass for validation.
         training_ind : ndarray
             array of all possible indices for the training data.
         training_ind_d : ndarray
             array of all possible indices for the training derivatives.
-        test_indices : ndarray
+        test_ind : ndarray
             array of all possible indices for the validation data.
-        test_indices_d : ndarray
+        test_ind_d : ndarray
             array of all possible indices for the validation derivatives.
         update_bar : objTQDM
             progress bar for the number of weight and bias updates.
@@ -706,14 +914,10 @@ class IMNN():
         sim : int
             conuter for the initial simulation of each batch of at_once to be
             passed at once.
-        current_dictionary : dict
+        pd : dict
             dictionary containing the data, or the index of the data, to pass
             through the network and the indices of the summary variables to
-            fill.
-        test_dictionary : dict
-            dictionary containing the validation data, or the index of the
-            data, to pass through the network and the indices of the summary
-            variables to fill.
+            fill and the strength of the regulariser.
         """
         if isnotebook():
             bar = tqdm.tqdm_notebook
@@ -721,19 +925,30 @@ class IMNN():
             bar = tqdm.tqdm
 
         if not self.load_data:
-            check_data(self, data)
-            data_size = data["data"].shape[0]
-            data_d_size = data["data_d"].shape[0]
+            num_sims = data["data"].shape[0]
+            num_partial_sims = data["data_d"].shape[0]
+            if "validation_data" in data.keys() \
+                    and "validation_data_d" in data.keys():
+                self.validate = True
+                num_validation_sims = data["validation_data"].shape[0]
+                num_validation_partial_sims = \
+                    data["validation_data_d"].shape[0]
+            else:
+                self.validate = False
         else:
-            data_size = tf.get_default_graph(
-                ).get_tensor_by_name("stored_data:0").get_shape()[0]
-            data_d_size = tf.get_default_graph(
-                ).get_tensor_by_name("stored_data_d:0").get_shape()[0]
+            num_sims = tf.get_default_graph(
+                ).get_tensor_by_name("stored_data:0").get_shape().as_list()[0]
+            num_partial_sims = tf.get_default_graph(
+                ).get_tensor_by_name(
+                    "stored_data_d:0").get_shape().as_list()[0]
+            if self.validate:
+                num_validation_sims = tf.get_default_graph(
+                    ).get_tensor_by_name(
+                        "stored_validation_data:0").get_shape().as_list()[0]
+                num_validation_partial_sims = tf.get_default_graph(
+                    ).get_tensor_by_name(
+                        "stored_validation_data_d:0").get_shape().as_list()[0]
 
-        to_test = check_amounts(num_sims, num_partial_sims,
-                                num_validation_sims,
-                                num_validation_partial_sims,
-                                data_size, data_d_size)
         updates = positive_integer(updates, key="number of updates")
         at_once = positive_integer(at_once, key="simulations to ⁠pass at once")
         learning_rate = constrained_float(learning_rate, key="learning rate")
@@ -741,14 +956,29 @@ class IMNN():
         training_ind = np.arange(num_sims)
         training_ind_d = np.arange(num_partial_sims)
 
-        if to_test:
-            test_indices = np.arange(num_validation_sims) + num_sims
-            test_indices_d = np.arange(num_validation_partial_sims) \
-                + num_partial_sims
+        if self.validate:
+            test_ind = np.arange(num_validation_sims)
+            test_ind_d = np.arange(num_validation_partial_sims)
 
         if restart:
-            self.history = {"trace F": np.array([]),
-                            "trace test F": np.array([])}
+            self.history = {"det F": np.array([]),
+                            "det test F": np.array([]),
+                            "loss": np.array([]),
+                            "test loss": np.array([])}
+            self.diagnostics = {
+                "det C": np.array([]),
+                "det test C": np.array([]),
+                "fisher gradient": np.array([
+                    ]).reshape((0, self.n_s, self.n_summaries)),
+                "weights": [
+                    np.array([]).reshape(
+                        [0] + self.store_gradients[i].get_shape().as_list())
+                    for i in range(len(self.store_gradients))],
+                "gradients": [
+                    np.array(
+                     []).reshape([0] + self.store_gradients[
+                        i].get_shape().as_list())
+                    for i in range(len(self.store_gradients))]}
             self.sess.run(tf.global_variables_initializer())
 
         update_bar = bar(range(updates), desc="Updates")
@@ -756,33 +986,67 @@ class IMNN():
             np.random.shuffle(training_ind)
             np.random.shuffle(training_ind_d)
             for sim in range(0, self.n_s, at_once):
-                current_dictionary = self.get_dictionary(
-                    np.arange(sim, min(sim + at_once, self.n_s)),
-                    data["data"],
-                    training_ind,
-                    derivative=False)
+                pd = {"index:0": np.arange(sim, min(sim + at_once, self.n_s))}
+                if self.load_data:
+                    pd["data_ind:0"] = \
+                        training_ind[pd["index:0"]][:, np.newaxis]
+                else:
+                    pd["data:0"] = data["data"][training_ind[pd["index:0"]]]
                 self.sess.run(
                     "get_summaries",
-                    feed_dict={**training_dictionary, **current_dictionary})
+                    feed_dict={**training_dictionary, **pd})
             for sim in range(0, self.n_p, at_once):
-                current_dictionary = self.get_dictionary(
-                    np.arange(sim, min(sim + at_once, self.n_p)),
-                    data["data_d"],
-                    training_ind_d,
-                    derivative=True)
+                pd = {"index:0": np.arange(sim, min(sim + at_once, self.n_p))}
+                if self.load_data:
+                    pd["data_ind:0"] = \
+                        training_ind_d[pd["index:0"]][:, np.newaxis]
+                else:
+                    pd["data:0"] = data["data"][training_ind_d[pd["index:0"]]]
+                    pd["data_d:0"] = \
+                        data["data_d"][training_ind_d[pd["index:0"]]]
                 self.sess.run(
                     "get_summaries_d",
-                    feed_dict={**training_dictionary, **current_dictionary})
+                    feed_dict={**training_dictionary, **pd})
             self.sess.run(self.reset_gradients)
             for sim in range(0, self.n_s, at_once):
-                current_dictionary = self.get_dictionary(
-                    np.arange(sim, min(sim + at_once, self.n_s)),
-                    data["data"],
-                    training_ind,
-                    derivative=False)
+                pd = {"index:0": np.arange(sim, min(sim + at_once, self.n_s)),
+                      "coupling:0": constraint_strength}
+                if self.load_data:
+                    pd["data_ind:0"] = \
+                        training_ind[pd["index:0"]][:, np.newaxis]
+                else:
+                    pd["data:0"] = data["data"][training_ind[pd["index:0"]]]
                 self.sess.run(
                     self.get_gradients,
-                    feed_dict={**training_dictionary, **current_dictionary})
+                    feed_dict={**training_dictionary, **pd})
+                if diagnostics:
+                    temp_gradients, temp_fisher_gradient = self.sess.run(
+                        [self.gradients, "fisher_gradient:0"],
+                        feed_dict={**training_dictionary, **pd})
+            for sim in range(0, self.n_p, at_once):
+                pd = {"index:0": np.arange(sim, min(sim + at_once, self.n_p)),
+                      "coupling:0": constraint_strength}
+                if self.load_data:
+                    pd["data_ind:0"] = \
+                        training_ind_d[pd["index:0"]][:, np.newaxis]
+                else:
+                    pd["data:0"] = data["data"][training_ind_d[pd["index:0"]]]
+                    pd["data_d:0"] = \
+                        data["data_d"][training_ind_d[pd["index:0"]]]
+                self.sess.run(
+                    self.get_gradients_d,
+                    feed_dict={**training_dictionary, **pd})
+            if diagnostics:
+                for i in range(len(self.gradients)):
+                    self.diagnostics["gradients"][i] = np.concatenate(
+                        [self.diagnostics["gradients"][i],
+                         [temp_gradients[i][0]]])
+                    self.diagnostics["weights"][i] = np.concatenate(
+                        [self.diagnostics["weights"][i],
+                         [temp_gradients[i][1]]])
+                self.diagnostics["fisher gradient"] = np.concatenate(
+                    [self.diagnostics["fisher gradient"],
+                     [temp_fisher_gradient]])
             self.sess.run(
                 self.apply_gradients,
                 feed_dict={"learning_rate:0": learning_rate})
@@ -791,121 +1055,122 @@ class IMNN():
                 np.random.shuffle(training_ind)
                 np.random.shuffle(training_ind_d)
                 for sim in range(0, self.n_s, at_once):
-                    current_dictionary = self.get_dictionary(
-                        np.arange(sim, min(sim + at_once, self.n_s)),
-                        data["data"],
-                        training_ind,
-                        derivative=False)
+                    pd = {"index:0": np.arange(
+                        sim, min(sim + at_once, self.n_s))}
+                    if self.load_data:
+                        pd["data_ind:0"] = \
+                            training_ind[pd["index:0"]][:, np.newaxis]
+                    else:
+                        pd["data:0"] = \
+                            data["data"][training_ind[pd["index:0"]]]
                     self.sess.run(
                         "get_summaries",
-                        feed_dict={**validation_dictionary,
-                                   **current_dictionary})
+                        feed_dict={**validation_dictionary, **pd})
                 for sim in range(0, self.n_p, at_once):
-                    current_dictionary = self.get_dictionary(
-                        np.arange(sim, min(sim + at_once, self.n_p)),
-                        data["data_d"],
-                        training_ind_d,
-                        derivative=True)
+                    pd = {"index:0": np.arange(
+                        sim, min(sim + at_once, self.n_p))}
+                    if self.load_data:
+                        pd["data_ind:0"] = \
+                            training_ind_d[pd["index:0"]][:, np.newaxis]
+                    else:
+                        pd["data:0"] = \
+                            data["data"][training_ind_d[pd["index:0"]]]
+                        pd["data_d:0"] = \
+                            data["data_d"][training_ind_d[pd["index:0"]]]
                     self.sess.run(
                         "get_summaries_d",
+                        feed_dict={**validation_dictionary, **pd})
+                if diagnostics:
+                    logdetF, loss, cov = self.sess.run(
+                        ["logdetfisher:0", "loss:0", "covariance:0"],
                         feed_dict={**validation_dictionary,
-                                   **current_dictionary})
-                self.history["det F"] = np.concatenate([
-                    self.history["det F"],
-                    [np.exp(self.sess.run("logdetfisher:0"))]])
-
-                if to_test:
-                    np.random.shuffle(test_indices)
-                    np.random.shuffle(test_indices_d)
-                    for sim in range(0, self.n_s, at_once):
-                        test_dictionary = self.get_dictionary(
-                            np.arange(sim, min(sim + at_once, self.n_s)),
-                            data["data"],
-                            test_indices,
-                            derivative=False)
-                        self.sess.run(
-                            "get_summaries",
-                            feed_dict={**validation_dictionary,
-                                       **test_dictionary})
-                    for sim in range(0, self.n_p, at_once):
-                        test_dictionary = self.get_dictionary(
-                            np.arange(sim, min(sim + at_once, self.n_p)),
-                            data["data_d"],
-                            test_indices_d,
-                            derivative=True)
-                        self.sess.run(
-                            "get_summaries_d",
-                            feed_dict={**validation_dictionary,
-                                       **test_dictionary})
-                    self.history["det test F"] = np.concatenate([
-                        self.history["det test F"],
-                        [np.exp(self.sess.run("logdetfisher:0"))]])
-                    update_bar.set_postfix(
-                        F=self.history["det F"][-1],
-                        validation_F=self.history["det test F"][-1])
+                                   **{"coupling:0": constraint_strength}})
+                    self.diagnostics["det C"] = np.concatenate(
+                        [self.diagnostics["det C"], [np.linalg.det(cov)]])
                 else:
-                    update_bar.set_postfix(F=self.history["det F"][-1])
-
-    def get_dictionary(self, inds, data, indices, derivative=None):
-        """Get the dictionary to pass objects into the TF graph
-
-        Function fills a dictionary with slices of data to be passed to the
-        graph if the data is not preloaded to the graph, otherwise it reshapes
-        the indices to slice through the tensors already in the graph.
-
-        This dictionary changes on every pass of the data which is why it is
-        update here.
-
-        The index of the stored variables is also denoted here.
-
-        We pass the objects to the tensors by name so that we don't have to
-        pass around tensor objects outside of the graph by name.
-
-        Parameters
-        __________
-        inds : ndarray
-            the values of the indices to pass at which to fill the stored
-            summary values
-        data : ndarray
-            the value of the data to be sliced and passed to the network.
-            if the data is preloaded to the network then the data variable is
-            overwritten with the values of the indices to slice the stored data
-            at.
-        indices : ndarray
-            the random index array to randomly select data to pass to the
-            network, or the random indices to pass to the network to select the
-            data if it is already preloaded.
-        derivative : bool, optional
-            a switch to choose the name of the tensor to send the data to in
-            the feed dictionary.
-        key : str
-            the name of the tensor in the TF graph to fill to calculate the
-            network output.
-        dictionary : dict
-            the holder dictionary to be returned with the data and the indices.
-
-        Returns
-        _______
-        dict
-            the holder dictionary to be returned with the data and the indices.
-        """
-        if self.load_data:
-            data = indices[inds][:, np.newaxis]
-            if derivative:
-                key = "data_d_ind:0"
-            else:
-                key = "data_ind:0"
-        else:
-            data = data[indices[inds]]
-            if derivative:
-                key = "data_d:0"
-            else:
-                key = "data:0"
-
-        dictionary = {}
-        dictionary["index:0"] = inds
-        dictionary[key] = data
-        return dictionary
+                    logdetF, loss = self.sess.run(
+                        ["logdetfisher:0", "loss:0"],
+                        feed_dict={**validation_dictionary,
+                                   **{"coupling:0": constraint_strength}})
+                self.history["det F"] = np.concatenate(
+                    [self.history["det F"], [np.exp(logdetF)]])
+                self.history["loss"] = np.concatenate(
+                    [self.history["loss"], [loss]])
+                if self.validate:
+                    np.random.shuffle(test_ind)
+                    np.random.shuffle(test_ind_d)
+                    for sim in range(0, self.n_s, at_once):
+                        pd = {"index:0":
+                              np.arange(sim, min(sim + at_once, self.n_s))}
+                        if self.load_data:
+                            pd["data_ind:0"] = \
+                                test_ind[pd["index:0"]][:, np.newaxis]
+                        else:
+                            pd["data:0"] = \
+                                data["validation_data"][
+                                    test_ind[pd["index:0"]]]
+                        self.sess.run(
+                            "get_validation_summaries",
+                            feed_dict={**validation_dictionary,
+                                       **pd})
+                    for sim in range(0, self.n_p, at_once):
+                        pd = {"index:0":
+                              np.arange(sim, min(sim + at_once, self.n_p))}
+                        if self.load_data:
+                            pd["data_ind:0"] = \
+                                test_ind_d[pd["index:0"]][:, np.newaxis]
+                        else:
+                            pd["data:0"] = \
+                                data["validation_data"][
+                                    test_ind_d[pd["index:0"]]]
+                            pd["data_d:0"] = \
+                                data["validation_data_d"][
+                                    test_ind_d[pd["index:0"]]]
+                        self.sess.run(
+                            "get_validation_summaries_d",
+                            feed_dict={**validation_dictionary,
+                                       **pd})
+                    if diagnostics:
+                        logdetF, loss, cov = self.sess.run(
+                            ["logdetfisher:0", "loss:0", "covariance:0"],
+                            feed_dict={**validation_dictionary,
+                                       **{"coupling:0": constraint_strength}})
+                        self.diagnostics["det test C"] = np.concatenate(
+                            [self.diagnostics["det test C"],
+                             [np.linalg.det(cov)]])
+                    else:
+                        logdetF, loss = self.sess.run(
+                            ["logdetfisher:0", "loss:0"],
+                            feed_dict={**validation_dictionary,
+                                       **{"coupling:0": constraint_strength}})
+                    self.history["det test F"] = np.concatenate(
+                        [self.history["det test F"], [np.exp(logdetF)]])
+                    self.history["test loss"] = np.concatenate(
+                        [self.history["test loss"], [loss]])
+                    if diagnostics:
+                        update_bar.set_postfix(
+                            F=self.history["det F"][-1],
+                            validation_F=self.history["det test F"][-1],
+                            C=self.diagnostics["det C"][-1],
+                            validation_C=self.diagnostics["det test C"][-1],
+                            loss=self.history["loss"][-1],
+                            validation_loss=self.history["loss"][-1])
+                    else:
+                        update_bar.set_postfix(
+                            F=self.history["det F"][-1],
+                            validation_F=self.history["det test F"][-1],
+                            loss=self.history["loss"][-1],
+                            validation_loss=self.history["loss"][-1])
+                else:
+                    if diagnostics:
+                        update_bar.set_postfix(
+                            F=self.history["det F"][-1],
+                            C=self.diagnostics["det C"][-1],
+                            loss=self.history["loss"][-1])
+                    else:
+                        update_bar.set_postfix(
+                            F=self.history["det F"][-1],
+                            loss=self.history["loss"][-1])
 
 
 @tf.custom_gradient
@@ -926,34 +1191,91 @@ def input_fisher(x):
     tensorTF_float
         an identity operator on the IMNN summaries
     tensorTF_float
-        a tiled tensor with the shape of the gradients of all weights and
-        biases, filled with the self defined tensor living in the TF graph.
+        the selected set of gradients to backpropagate at one time.
     """
     def grad(dy):
         """
         Gradient of the log determinant of the Fisher information
 
-        Grabs the tensor from the TF graph and tiles it to the correct shape.
+        Grabs the tensor from the TF graph and gathers only appropriate indices
+
+        Parameters
+        __________
+        dy : tensorTF_float
+            inputted tensor to be updated during the backpropagation.
+        gradient : tensorTF_float
+            the derivative of the loss function loaded from the TF graph.
+        indices : tensorTF_int
+            the indices of the forward pass summaries at which to calculate the
+            gradient for the backpropagation.
+
+        Returns
+        _______
+        tensorTF_float
+            gathered gradient with shape of input gradient tensor
+
+        """
+        gradient = tf.get_default_graph(
+            ).get_tensor_by_name("fisher_gradient:0")
+        indices = tf.reshape(
+            tf.get_default_graph().get_tensor_by_name("index:0"),
+            (-1, 1))
+        return tf.gather_nd(gradient, indices)
+    return tf.identity(x), grad
+
+
+@tf.custom_gradient
+def input_fisher_d(x):
+    """
+    Self defined gradient for sequential backpropagation with respect to the
+    derivative of the network with respect to the model parameters.
+
+    This must be defined outside of classes, but it is not called until
+    IMNN.IMNN().train().
+
+    Parameters
+    __________
+    x : tensorTF_float
+        IMNN summaries (output of the neural network)
+
+    Returns
+    _______
+    tensorTF_float
+        an identity operator on the derivative of the summaries with respect to
+        the model parameters
+    tensorTF_float
+        the selected set of gradients to backpropagate at one time.
+    """
+    def grad(dy):
+        """
+        Gradient of the log determinant of the Fisher information with respect
+        to the derivative of the network with respect to the model parameters.
+
+        Grabs the tensor from the TF graph and gathers only appropriate indices
 
         Parameters
         __________
         dy : tensorTF_float
             inputted tensor to be update during the backpropagation.
         gradient : tensorTF_float
-            the derivative of the log determinant of the Fisher matrix from
+            the derivative of the loss function with respect to the derivative
+            of the network with respect to the model parameters loaded from the
             TF graph.
-        num_gradients : int
-            number of inidividual gradients to tile correct shape tensor
+        indices : tensorTF_int
+            the indices of the forward pass derivative of the sumarries with
+            respect to the model parameters at which to calculate the gradient
+            for the backpropagation.
 
         Returns
         _______
         tensorTF_float
-            tiled gradient with shape of input gradient tensor
+            gathered gradient with shape of input gradient tensor
 
         """
-        gradient = tf.get_default_graph().get_tensor_by_name(
-            "fisher_gradient:0")
-        num_gradients = len(gradient.get_shape().as_list()) - 1
-        return tf.tile(
-            gradient, [tf.shape(dy)[0]] + [1 for i in range(num_gradients)])
+        gradient = tf.get_default_graph(
+            ).get_tensor_by_name("fisher_gradient_d:0")
+        indices = tf.reshape(
+            tf.get_default_graph().get_tensor_by_name("index:0"),
+            (-1, 1))
+        return tf.gather_nd(gradient, indices)
     return tf.identity(x), grad
