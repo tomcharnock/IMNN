@@ -6,7 +6,7 @@ model parameters.
 """
 
 
-__version__ = '0.1rc1'
+__version__ = '0.1rc2'
 __author__ = "Tom Charnock"
 
 
@@ -131,6 +131,7 @@ class IMNN():
         self.saver = None
         self.load_data = None
         self.validate = None
+        self.use_extended_summaries = None
         self.get_compressor = None
         self.store_gradients = None
         self.get_gradients = None
@@ -272,7 +273,8 @@ class IMNN():
         else:
             print("cannot load model since there is no provided filename")
 
-    def setup(self, network=None, load_data=None):
+    def setup(self, network=None, load_data=None,
+              load_extended_summaries=None):
         """Build network, calculate Fisher information and define compression
 
         This is where the real business is done.
@@ -334,6 +336,9 @@ class IMNN():
             with respect to the parameters. If no data is provided then the
             class attribute load_data is set to False and data must be provided
             during the training.
+        load_extended_summaries : dict, optional
+            preloaded summaries for which the IMNN can provide a number of
+            extra summaries
         lr : tensorTF_float
             a placeholder for the learning rate of the optimiser
         data_ind : tensorTF_int
@@ -611,16 +616,6 @@ class IMNN():
             dtype=self._FLOATX,
             trainable=False,
             name="inverse_fisher")
-        mean = tf.Variable(
-            np.zeros((1, self.n_summaries)),
-            dtype=self._FLOATX,
-            trainable=False,
-            name="saved_mean")
-        compressor = tf.Variable(
-            np.zeros((self.n_params, self.n_summaries)),
-            dtype=self._FLOATX,
-            trainable=False,
-            name="compressor")
 
         with tf.variable_scope("IMNN") as scope:
             network_output = network(data)
@@ -701,17 +696,135 @@ class IMNN():
                 validation_summary_d,
                 name="get_validation_summaries_d")
 
+        if load_extended_summaries is not None:
+            if type(load_extended_summaries) == dict:
+                self.use_extended_summaries = True
+                self.n_extended_summaries = load_extended_summaries[
+                    "summaries"].shape[1]
+                push_extended_summary = tf.placeholder(
+                    dtype=self._FLOATX,
+                    shape=(None, self.n_extended_summaries),
+                    name="push_extended_summary")
+                full_summary = tf.concat(
+                    [summary, push_extended_summary],
+                    axis=1,
+                    name="summary")
+                if not self.load_data:
+                    data_ind = tf.placeholder(
+                        dtype=self._INTX,
+                        shape=(None, 1),
+                        name="data_ind")
+                stored_extended_summaries = tf.Variable(
+                    load_extended_summaries["summaries"],
+                    dtype=self._FLOATX,
+                    trainable=False,
+                    name="stored_extended_summaries")
+                stored_extended_summaries_d = tf.Variable(
+                    load_extended_summaries["summaries_d"],
+                    dtype=self._FLOATX,
+                    trainable=False,
+                    name="stored_extended_summaries_d")
+                extended_summaries = tf.Variable(
+                    np.zeros((self.n_s, self.n_extended_summaries)),
+                    dtype=self._FLOATX,
+                    trainable=False,
+                    name="extended_summaries")
+                extended_summaries_d = tf.Variable(
+                    np.zeros((self.n_p,
+                              self.n_params,
+                              self.n_extended_summaries)),
+                    dtype=self._FLOATX,
+                    trainable=False,
+                    name="extended_summaries_d")
+                get_extended_summaries = tf.scatter_update(
+                     extended_summaries,
+                     index,
+                     tf.gather_nd(
+                         stored_extended_summaries,
+                         data_ind),
+                     name="get_extended_summaries")
+                get_extended_summaries_d = tf.scatter_update(
+                     extended_summaries_d,
+                     index,
+                     tf.gather_nd(
+                         stored_extended_summaries_d,
+                         data_ind),
+                     name="get_extended_summaries_d")
+                if self.validate:
+                    stored_extended_validation_summaries = tf.Variable(
+                        load_extended_summaries["validation_summaries"],
+                        dtype=self._FLOATX,
+                        trainable=False,
+                        name="stored_extended_validation_summaries")
+                    stored_extended_validation_summaries_d = tf.Variable(
+                        load_extended_summaries["validation_summaries_d"],
+                        dtype=self._FLOATX,
+                        trainable=False,
+                        name="stored_extended_validation_summaries_d")
+                    get_extended_validation_summaries = tf.scatter_update(
+                         extended_summaries,
+                         index,
+                         tf.gather_nd(
+                             stored_extended_validation_summaries,
+                             data_ind),
+                         name="get_extended_validation_summaries")
+                    get_extended_validation_summaries_d = tf.scatter_update(
+                         extended_summaries_d,
+                         index,
+                         tf.gather_nd(
+                             stored_extended_validation_summaries_d,
+                             data_ind),
+                         name="get_extended_validation_summaries_d")
+                all_summaries = tf.concat(
+                    [summaries, extended_summaries],
+                    axis=1,
+                    name="all_summaries")
+                all_summaries_d = tf.concat(
+                    [summaries_d, extended_summaries_d],
+                    axis=2,
+                    name="all_summaries_d")
+
+            else:
+                all_summaries = tf.identity(summaries, name="all_summaries")
+                all_summaries_d = tf.identity(summaries_d,
+                                              name="all_summaries_d")
+                full_summary = tf.identity(summary, name="summary")
+                self.use_extended_summaries = False
+                self.n_extended_summaries = 0
+                print("calculated_summaries should be a dictionary but is a "
+                      + str(type(calculated_summaries)) + " so the summaries \
+                      will not be included.")
+        else:
+            self.use_extended_summaries = False
+            self.n_extended_summaries = 0
+            all_summaries = tf.identity(summaries, name="all_summaries")
+            all_summaries_d = tf.identity(summaries_d,
+                                          name="all_summaries_d")
+            full_summary = tf.identity(summary, name="summary")
+
+        mean = tf.Variable(
+            np.zeros((1, self.n_summaries + self.n_extended_summaries)),
+            dtype=self._FLOATX,
+            trainable=False,
+            name="saved_mean")
+        compressor = tf.Variable(
+            np.zeros((self.n_params,
+                      self.n_summaries + self.n_extended_summaries)),
+            dtype=self._FLOATX,
+            trainable=False,
+            name="compressor")
+
         dmudtheta = tf.reduce_mean(
-            summaries_d,
+            all_summaries_d,
             axis=0,
             name="mean_derivative")
         mu = tf.reduce_mean(
-            summaries,
+            all_summaries,
             axis=0,
             keepdims=True,
             name="mean")
         diff = tf.subtract(
-            summaries,
+            all_summaries,
             mu,
             name="difference_from_mean")
         cov = tf.divide(
@@ -788,7 +901,7 @@ class IMNN():
                 tf.einsum(
                     "ij,kj->ki",
                     compressor,
-                    tf.subtract(summary, mean))),
+                    tf.subtract(full_summary, mean))),
             name="MLE")
 
         trainer = tf.train.GradientDescentOptimizer(lr)
@@ -981,6 +1094,19 @@ class IMNN():
                     for i in range(len(self.store_gradients))]}
             self.sess.run(tf.global_variables_initializer())
 
+        if self.use_extended_summaries:
+            grab = ["get_summaries", "get_extended_summaries"]
+            grab_d = ["get_summaries_d", "get_extended_summaries_d"]
+            validation_grab = ["get_validation_summaries",
+                               "get_extended_validation_summaries"]
+            validation_grab_d = ["get_validation_summaries_d",
+                                 "get_extended_validation_summaries_d"]
+        else:
+            grab = "get_summaries"
+            grab_d = "get_summaries_d"
+            validation_grab = "get_validation_summaries"
+            validation_grab_d = "get_validation_summaries_d"
+
         update_bar = bar(range(updates), desc="Updates")
         for update in update_bar:
             np.random.shuffle(training_ind)
@@ -992,8 +1118,11 @@ class IMNN():
                         training_ind[pd["index:0"]][:, np.newaxis]
                 else:
                     pd["data:0"] = data["data"][training_ind[pd["index:0"]]]
+                    if self.use_extended_summaries:
+                        pd["data_ind:0"] = \
+                            training_ind[pd["index:0"]][:, np.newaxis]
                 self.sess.run(
-                    "get_summaries",
+                    grab,
                     feed_dict={**training_dictionary, **pd})
             for sim in range(0, self.n_p, at_once):
                 pd = {"index:0": np.arange(sim, min(sim + at_once, self.n_p))}
@@ -1004,8 +1133,11 @@ class IMNN():
                     pd["data:0"] = data["data"][training_ind_d[pd["index:0"]]]
                     pd["data_d:0"] = \
                         data["data_d"][training_ind_d[pd["index:0"]]]
+                    if self.use_extended_summaries:
+                        pd["data_ind:0"] = \
+                            training_ind_d[pd["index:0"]][:, np.newaxis]
                 self.sess.run(
-                    "get_summaries_d",
+                    grab_d,
                     feed_dict={**training_dictionary, **pd})
             self.sess.run(self.reset_gradients)
             for sim in range(0, self.n_s, at_once):
@@ -1016,6 +1148,9 @@ class IMNN():
                         training_ind[pd["index:0"]][:, np.newaxis]
                 else:
                     pd["data:0"] = data["data"][training_ind[pd["index:0"]]]
+                    if self.use_extended_summaries:
+                        pd["data_ind:0"] = \
+                            training_ind[pd["index:0"]][:, np.newaxis]
                 self.sess.run(
                     self.get_gradients,
                     feed_dict={**training_dictionary, **pd})
@@ -1033,6 +1168,9 @@ class IMNN():
                     pd["data:0"] = data["data"][training_ind_d[pd["index:0"]]]
                     pd["data_d:0"] = \
                         data["data_d"][training_ind_d[pd["index:0"]]]
+                    if self.use_extended_summaries:
+                        pd["data_ind:0"] = \
+                            training_ind_d[pd["index:0"]][:, np.newaxis]
                 self.sess.run(
                     self.get_gradients_d,
                     feed_dict={**training_dictionary, **pd})
@@ -1063,8 +1201,11 @@ class IMNN():
                     else:
                         pd["data:0"] = \
                             data["data"][training_ind[pd["index:0"]]]
+                        if self.use_extended_summaries:
+                            pd["data_ind:0"] = \
+                                training_ind[pd["index:0"]][:, np.newaxis]
                     self.sess.run(
-                        "get_summaries",
+                        grab,
                         feed_dict={**validation_dictionary, **pd})
                 for sim in range(0, self.n_p, at_once):
                     pd = {"index:0": np.arange(
@@ -1077,8 +1218,11 @@ class IMNN():
                             data["data"][training_ind_d[pd["index:0"]]]
                         pd["data_d:0"] = \
                             data["data_d"][training_ind_d[pd["index:0"]]]
+                        if self.use_extended_summaries:
+                            pd["data_ind:0"] = \
+                                training_ind_d[pd["index:0"]][:, np.newaxis]
                     self.sess.run(
-                        "get_summaries_d",
+                        grab_d,
                         feed_dict={**validation_dictionary, **pd})
                 if diagnostics:
                     logdetF, loss, cov = self.sess.run(
@@ -1109,8 +1253,11 @@ class IMNN():
                             pd["data:0"] = \
                                 data["validation_data"][
                                     test_ind[pd["index:0"]]]
+                            if self.use_extended_summaries:
+                                pd["data_ind:0"] = \
+                                    test_ind[pd["index:0"]][:, np.newaxis]
                         self.sess.run(
-                            "get_validation_summaries",
+                            validation_grab,
                             feed_dict={**validation_dictionary,
                                        **pd})
                     for sim in range(0, self.n_p, at_once):
@@ -1126,8 +1273,11 @@ class IMNN():
                             pd["data_d:0"] = \
                                 data["validation_data_d"][
                                     test_ind_d[pd["index:0"]]]
+                            if self.use_extended_summaries:
+                                pd["data_ind:0"] = \
+                                    test_ind_d[pd["index:0"]][:, np.newaxis]
                         self.sess.run(
-                            "get_validation_summaries_d",
+                            validation_grab_d,
                             feed_dict={**validation_dictionary,
                                        **pd})
                     if diagnostics:

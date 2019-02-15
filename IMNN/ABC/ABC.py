@@ -5,7 +5,7 @@ the IMNN.
 """
 
 
-__version__ = '0.1rc1'
+__version__ = '0.1rc2'
 __author__ = "Tom Charnock"
 
 
@@ -49,7 +49,7 @@ class ABC():
         the number of total draws from the proposal for the PMC
     """
     def __init__(self, real_data, prior, sess, get_compressor, simulator, seed,
-                 simulator_args, dictionary={}):
+                 simulator_args, dictionary={}, real_extended_summaries=False):
         """Initialises the ABC class and calculates some useful values
 
         Parameters
@@ -75,12 +75,19 @@ class ABC():
         self.prior = prior
         self.sess.run(get_compressor)
         self.fisher = self.sess.run("fisher:0")
+        graph_dictionary = {"data:0": real_data}
+        if real_extended_summaries is not None:
+            self.use_extended_summaries = True
+            graph_dictionary["push_extended_summary:0"] = \
+                real_extended_summaries
+        else:
+            self.use_extended_summaries = False
         self.summary = sess.run(
-            "IMNN/summary:0",
-            feed_dict={**dictionary, **{"data:0": real_data}})
+            "summary:0",
+            feed_dict={**dictionary, **graph_dictionary})
         self.MLE = sess.run(
             "MLE:0",
-            feed_dict={**dictionary, **{"data:0": real_data}})
+            feed_dict={**dictionary, **graph_dictionary})
         self.simulator = lambda x: simulator(x, seed, simulator_args)
         self.n_summaries = self.summary.shape[-1]
         self.n_params = self.fisher.shape[0]
@@ -88,19 +95,25 @@ class ABC():
         self.ABC_dict = {
             "parameters": np.array([]).reshape((0, self.n_params)),
             "summaries": np.array([]).reshape((0, self.n_summaries)),
-            "differences": np.array([]).reshape((0, self.n_summaries)),
+            "differences": np.array([]).reshape((0, self.n_params)),
             "distances": np.array([]),
             "MLE": np.array([]).reshape((0, self.n_params))}
         self.PMC_dict = {
             "parameters": np.array([]).reshape((0, self.n_params)),
             "summaries": np.array([]).reshape((0, self.n_summaries)),
-            "differences": np.array([]).reshape((0, self.n_summaries)),
+            "differences": np.array([]).reshape((0, self.n_params)),
             "distances": np.array([]),
             "MLE": np.array([]).reshape((0, self.n_params))}
         self.total_draws = 0
 
+    def notMLE(self):
+        self.ABC_dict["differences"] = self.ABC_dict["differences"].reshape(
+            (0, self.n_summaries))
+        self.PMC_dict["differences"] = self.PMC_dict["differences"].reshape(
+            (0, self.n_summaries))
+
     def ABC(self, draws, at_once=True, save_sims=None, return_dict=False,
-            PMC=False, MLE=False):
+            PMC=False, MLE=True):
         """Approximate Bayesian computation
 
         Here we draw some parameter values from the prior supplied to the class
@@ -159,38 +172,55 @@ class ABC():
             sims = self.simulator(parameters)
             if save_sims is not None:
                 np.savez(save_sims + ".npz", sims)
+            if self.use_extended_summaries:
+                graph_dictionary = {
+                    "data:0": sims[0],
+                    "push_extended_summary:0": sims[1]}
+            else:
+                graph_dictionary = {"data:0": sims}
             summaries = self.sess.run(
-                "IMNN/summary:0",
-                feed_dict={**self.dictionary, **{"data:0": sims}})
+                "summary:0",
+                feed_dict={**self.dictionary, **graph_dictionary})
             if MLE:
                 MLEs = self.sess.run(
                     "MLE:0",
-                    feed_dict={**self.dictionary, **{"data:0": sims}})
+                    feed_dict={**self.dictionary, **graph_dictionary})
         else:
-            summaries = np.zeros([draws, self.n_summaries])
+            summaries = np.zeros(
+                [draws, self.n_summaries])
             if MLE:
                 MLEs = np.zeros([draws, self.n_params])
             for theta in bar(range(draws), desc="Simulations"):
                 sim = self.simulator([parameters[theta]])
                 if save_sims is not None:
                     np.savez(save_sims + "_" + str(theta), sim)
+                if self.use_extended_summaries:
+                    graph_dictionary = {
+                        "data:0": sims[0],
+                        "push_extended_summary:0": sims[1]}
+                else:
+                    graph_dictionary = {"data:0": sims}
                 summaries[theta] = self.sess.run(
-                    "IMNN/summary:0",
-                    feed_dict={**self.dictionary, **{"data:0": sim}})[0]
+                    "summary:0",
+                    feed_dict={**self.dictionary, **graph_dictionary})[0]
                 if MLE:
                     MLEs[theta] = self.sess.run(
                         "MLE:0",
-                        feed_dict={**self.dictionary, **{"data:0": sim}})[0]
+                        feed_dict={**self.dictionary, **graph_dictionary})[0]
 
-        differences = summaries - self.summary
-        distances = np.sqrt(
-            np.einsum(
-                'ij,ij->i',
-                differences,
+        if MLE:
+            differences = MLEs - self.MLE
+            distances = np.sqrt(
                 np.einsum(
-                    'jk,ik->ij',
-                    self.fisher,
-                    differences)))
+                    'ij,ij->i',
+                    differences,
+                    np.einsum(
+                        'jk,ik->ij',
+                        self.fisher,
+                        differences)))
+        else:
+            differences = summaries - self.summary
+            distances = np.sqrt(np.mean(differences, axis=1)**2.)
 
         if return_dict:
             ABC_dict = {"parameters": parameters,
@@ -214,7 +244,7 @@ class ABC():
                     [self.ABC_dict["MLE"], MLEs])
 
     def PMC(self, draws, posterior, criterion, at_once=True, save_sims=None,
-            restart=False, MLE=False):
+            restart=False, MLE=True):
         """Population Monte Carlo
 
         This is the population Monte Carlo sequential ABC method, highly
@@ -348,7 +378,8 @@ class ABC():
             accepted_summaries = np.zeros(
                 (stored_move_ind.shape[0], self.n_summaries))
             accepted_differences = np.zeros(
-                (stored_move_ind.shape[0], self.n_summaries))
+                (stored_move_ind.shape[0],
+                 self.PMC_dict["differences"].shape[-1]))
             if MLE:
                 accepted_MLE = np.zeros(
                     (stored_move_ind.shape[0], self.n_params))
