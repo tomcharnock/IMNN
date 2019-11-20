@@ -293,13 +293,12 @@ class IMNN():
         bar = tqdm.tnrange(n_iterations, desc="Iterations")
         for iterations in bar:
             for batch in range(self.n_batch):
-                print(batch)
                 if self.single_dataset:
-                    temp = self.simple_train_iteration(self.data_iterator)
+                    temp = self.simple_train_iteration(*next(self.data_iterator))
                 else:
                     temp = self.simple_train_iteration(
-                        self.data_iterator,
-                        self.data_derivative_iterator)
+                        *next(self.data_iterator),
+                        *next(self.data_derivative_iterator))
             self.history["det_F"].append(temp[0].numpy())
             self.history["det_C"].append(temp[1].numpy())
             self.history["det_Cinv"].append(temp[2].numpy())
@@ -346,22 +345,8 @@ class IMNN():
                     r=self.history["r"][-1])
 
     @tf.function
-    def simple_train_iteration(self, data_iterator, derivative_iterator=None):
+    def simple_train_iteration(self, d, dd_dθ, s=None, ds_dθ=None):
         with tf.GradientTape(persistent=True) as tape:
-            print("Get data")
-            if self.single_dataset:
-                if self.use_summaries:
-                    d, dd_dθ, s, ds_dθ = next(data_iterator)
-                else:
-                    d, dd_dθ = next(data_iterator)
-            else:
-                if self.use_summaries:
-                    d, s = next(data_iterator)
-                    dd_dθ, ds_dθ = next(derivative_iterator)
-                else:
-                    d = next(data_iterator)
-                    dd_dθ = next(derivative_iterator)
-            print("Pass data through model")
             if not self.numerical:
                 tape.watch(d)
             else:
