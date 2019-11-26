@@ -11,13 +11,13 @@ Use precomputed external covariance and derivatives
 """
 
 
-__version__ = '0.2dev1'
+__version__ = '0.2a1'
 __author__ = "Tom Charnock"
 
 
 import tensorflow as tf
 import tqdm
-from IMNN.utils.utils import utils
+from utils.utils import utils
 
 
 class IMNN():
@@ -759,11 +759,10 @@ class IMNN():
                     det_Cinv=self.history["det_Cinv"][-1],
                     r=self.history["r"][-1])
 
-    def train(self, F, C, Cinv, dμ_dθ, score, dx_dw, dC_dx, d2x_dwdθ=None,
-              C_n=None, Cinv_n=None):
-        """Analytic calculation of gradients for updating weights
+    def automatic_train(self, x, dx_dθ, dx_dw, d2x_dwdθ, s=None, ds_dθ=None):
+        """Automatic calculation of gradients for updating weights
 
-        The Fisher information is maximised by analytically calculating the
+        The Fisher information is maximised by automatically calculating the
         derivative of the logarithm of the determinant of the Fisher matrix
         regularised by the Frobenius norm of the elementwise difference of the
         summary covariance and the inverse covariance of the summaries from the
@@ -785,68 +784,35 @@ class IMNN():
 
         Parameters
         __________
-        F : TF tensor float (n_params, n_params)
-            Fisher information matrix
-        C : TF tensor float (n_summaries, n_summaries) or
-                (n_summaries + n_external, n_summaries + n_external)
-            covariance of the summaries
-        Cinv : TF tensor float (n_summaries, n_summaries) or
-                (n_summaries + n_external, n_summaries + n_external)
-            inverse covariance of the summaries
-        dμ_dθ : TF tensor float (n_params, n_summaries) or
-                (n_params, n_summaries + n_external)
-            derivative of the mean of the summaries with respect to the params
-        score : TF tensor float (n_params, n_summaries) or
-                (n_params, n_summaries + n_external)
-            product of inverse covariance and dμ_dθ
-        dx_dw : list of TF tensor float
-            list of the Jacobians for each layer of the network
-        dC_dx : TF tensor (n_s, n_s, n_summaries, n_summaries, n_summaries)
-            derivative of the summaries covariance wrt network outputs
-        d2x_dwdθ : list of TF tensor float
-            derivatives of simulations for numerical derivative wrt network
-        C_n : TF tensor float (n_summaries, n_summaries) {None}
-            covariance of just network summaries
-        Cinv_n : TF tensor float (n_summaries, n_summaries) {None}
-            inverse covariance of just network summaries
 
         Returns
         _______
-        TF tensor float (1,)
-            value of the regularisation function
-        TF tensor float (1,)
-            value of the strength of the regularisation function
 
         Calls
         _____
-        get_loss(tensor, tensor, tensor, tensor, tensor) -> tensor
-            calculates analytic derivative of ls(det(F)) wrt network outputs
-        get_num_loss(tensor, tensor, tensor, tensor, tensor, tensor) -> tensor
-            calculates analytic gradient of ln(det(F)) wrt derivative summaries
-        get_regularisation_derivative(tensor, tensor, list)
-                -> list, tensor, tensor
-            calculates network derivative of Frobenius norm of |C-I|+|C^{-1}-I|
         """
-        Finv = tf.linalg.inv(F)
-        dΛ_dx = self.get_loss(Finv, Cinv, dμ_dθ, score, dC_dx)
+        with tf.GradientTape() as tape:
+            if self.numerical:
+                tape.watch([x, dx_dθ])
+            else:
+                tape.watch(x)
+            F, C, Cinv, dμ_dθ, _, _, _, _ = self.get_stats(
+                x, dx_dθ, self.numerical, self.use_external, s=s,
+                ds_dθ=ds_dθ, δθ=self.δθ)
+            reg, _ = self.get_regularisation(C, Cinv)
+            r, _ = self.get_r(reg)
+            Λ = tf.subtract(tf.multiply(r, reg), tf.linalg.slogdet(F))
         if self.numerical:
-            d2Λ_dxdθ = tf.stack(
-                [self.get_num_loss(Finv, Cinv, dμ_dθ, score, dC_dx, -1.),
-                 self.get_num_loss(Finv, Cinv, dμ_dθ, score, dC_dx, 1.)],
-                axis=1)
-        if self.use_external:
-            dreg_dx, reg, r = self.get_regularisation_derivative(C_n, Cinv_n,
-                                                                 dC_dx)
+            dΛ_dx, d2Λ_dxdθ = tape.gradient(Λ, [x, dx_dθ])
         else:
-            dreg_dx, reg, r = self.get_regularisation_derivative(C, Cinv,
-                                                                 dC_dx)
+            dΛ_dx = tape.gradient(Λ, x)
         gradients = []
         for layer in range(len(self.model.variables)):
             gradients.append(
                 tf.divide(
                     tf.einsum(
                         "ij,ij...->...",
-                        tf.add(dΛ_dx, dreg_dx),
+                        dΛ_dx,
                         dx_dw[layer]),
                     tf.dtypes.cast(
                         self.n_s,
@@ -863,7 +829,7 @@ class IMNN():
                             self.n_d,
                             self.dtype)))
         self.optimiser.apply_gradients(zip(gradients, self.model.variables))
-        return reg, r
+        return F, C, Cinv, dμ_dθ, reg, r
 
     def unpack_data(self, data, use_external):
         """ Unpacks zipped data and returns in regular format
@@ -974,8 +940,6 @@ class IMNN():
             append external summary derivatives to the IMNN summary derivatives
         get_covariance(TF tensor float) -> TF tensor, TF tensor, TF tensor
             calculates covariance, mean and difference of mean from zero for x
-        get_covariance_derivative(TF tensor float) -> list of TF tensor float
-            calculates derivative of the covariance with respect to network
         get_score(TF tensor float, TF tensor float) -> TF tensor float
             calculates the product of the inverse covariance and dμ_dθ
         get_fisher_matrix(TF tensor float, TF tensor float) -> TF tensor float
@@ -999,9 +963,6 @@ class IMNN():
                     lambda i: self.get_jacobian(
                         tf.expand_dims(i, 0)),
                     dd_dθ)
-                dμ_dθ = self.get_numerical_derivative_mean(dx_dθ, self.δθ,
-                                                           self.use_external,
-                                                           ds_dθ=ds_dθ)
             else:
                 x, dx_dd, dx_dw = tf.vectorized_map(
                     lambda i: self.get_jacobian(
@@ -1010,26 +971,8 @@ class IMNN():
                     d)
                 dx_dθ = None
                 d2x_dwdθ = None
-                dμ_dθ = tf.divide(
-                    tf.einsum("ij...,ik...->kj", dx_dd, dd_dθ),
-                    self.n_st)
-                if self.use_external:
-                    dμ_dθ = self.get_summary_derivative_mean(dμ_dθ, ds_dθ)
-            C, _, Δμ = self.get_covariance(x)
-            dC_dx = self.get_covariance_derivative(Δμ)
-            Cinv = tf.linalg.inv(C)
-            if self.use_external:
-                C_n = C
-                Cinv_n = Cinv
-                C, _, _ = self.get_covariance(tf.concat([s, x], axis=1))
-                Cinv = tf.linalg.inv(C)
-            else:
-                C_n = None
-                Cinv_n = None
-            score = self.get_score(Cinv, dμ_dθ)
-            F = self.get_fisher_matrix(Cinv, dμ_dθ, score)
-            reg, r = self.train(F, C, Cinv, dμ_dθ, score, dx_dw, dC_dx,
-                                d2x_dwdθ=d2x_dwdθ, C_n=C_n, Cinv_n=Cinv_n)
+            F, C, Cinv, dμ_dθ, reg, r = self.automatic_train(
+                x, dx_dθ, dx_dw, d2x_dwdθ, s=s, ds_dθ=ds_dθ)
         return tf.linalg.det(F), tf.linalg.det(C), tf.linalg.det(Cinv), \
             dμ_dθ, reg, r
 
@@ -1163,26 +1106,42 @@ class IMNN():
         if numerical:
             x = self.model(d)
             dx_dθ = self.model(dd_dθ)
-            dμ_dθ = self.get_numerical_derivative_mean(
-                dx_dθ, δθ, use_external, ds_dθ=ds_dθ)
         else:
             with tf.TapeGradient() as tape:
                 tape.watch(d)
                 x = self.model(d)
             dx_dd = tape.batch_jacobian(x, d)
+        F, C, Cinv, dμ_dθ, μ, score, _, _ = self.get_stats(
+            x, dx_dθ, numerical, use_external, s=s, ds_dθ=ds_dθ, δθ=δθ)
+        return F, C, Cinv, dμ_dθ, μ, score
+
+    def get_stats(self, x, dx_dθ, numerical, external, s=None, ds_dθ=None,
+                  δθ=None):
+        """
+        """
+        if numerical:
+            dμ_dθ = self.get_numerical_derivative_mean(dx_dθ, self.δθ,
+                                                       external,
+                                                       ds_dθ=ds_dθ)
+        else:
             dμ_dθ = tf.divide(
                 tf.einsum("ij...,ik...->kj", dx_dd, dd_dθ),
                 self.n_st)
-            if use_external:
+            if external:
                 dμ_dθ = self.get_summary_derivative_mean(dμ_dθ, ds_dθ)
-        if use_external:
-            C, μ, _ = self.get_covariance(tf.concat([s, x], axis=1))
-        else:
-            C, μ, _ = self.get_covariance(x)
+        C, μ, Δμ = self.get_covariance(x)
         Cinv = tf.linalg.inv(C)
+        if external:
+            C_n = C
+            Cinv_n = Cinv
+            C, _, _ = self.get_covariance(tf.concat([s, x], axis=1))
+            Cinv = tf.linalg.inv(C)
+        else:
+            C_n = None
+            Cinv_n = None
         score = self.get_score(Cinv, dμ_dθ)
         F = self.get_fisher_matrix(Cinv, dμ_dθ, score)
-        return F, C, Cinv, dμ_dθ, μ, score
+        return F, C, Cinv, dμ_dθ, μ, score, C_n, Cinv_n
 
     def get_jacobian(self, d, derivative=False):
         """ Calculates the summaries and Jacobian wrt to network parameters
@@ -1400,116 +1359,6 @@ class IMNN():
                 name="double_fisher"),
             name="fisher")
 
-    def get_covariance_derivative(self, Δμ):
-        """ Calculate the derivative of the covariance wrt network outputs
-
-        We can calculate the derivative of the covariance with respect to the
-        network outputs analytically
-
-        Parameters
-        __________
-        Δμ : TF tensor float (1, n_summaries)
-            difference between mean network outputs and the network outputs
-
-        Returns
-        _______
-        TF tensor float (n_s, n_summaries, n_summaries, n_summaries)
-            derivative of the covariance wrt the outputs
-        """
-        return tf.divide(
-            tf.reduce_sum(
-                tf.add(
-                    tf.einsum(
-                        "ijkl,im->ijkml",
-                        self.dΔμ_dx,
-                        Δμ,
-                        name="centred_mean_derivative_first_half"),
-                    tf.einsum(
-                        "ij,iklm->ikjlm",
-                        Δμ,
-                        self.dΔμ_dx,
-                        name="centred_mean_derivative_second_half"),
-                    name="centred_mean_derivative"),
-                axis=0,
-                name="unnormalised_covariance_derivative"),
-            self.n_sm1,
-            name="covariance_derivative")
-
-    def get_fisher_derivative(self, Cinv, dμdθ, score, dCdx):
-        dFdx = tf.linalg.band_part(
-            tf.einsum(
-                "ij,kljm->kmil",
-                dμdθ,
-                tf.einsum(
-                    "ij,kljm->klim",
-                    Cinv,
-                    tf.einsum(
-                        "ijkl,mk->imjl",
-                        dCdx,
-                        score,
-                        name="covariance_derivative_score"),
-                    name="inverse_covariance_covariance_derivative_score"),
-                name="half_derivative_of_fisher_wrt_summaries"),
-            0,
-            -1,
-            name="triangle_derivative_of_fisher_wrt_summaries")
-        return tf.multiply(
-            -0.5,
-            tf.add(
-                dFdx,
-                tf.transpose(
-                    dFdx,
-                    perm=[0, 1, 3, 2],
-                    name="transposed_derivative_of_fisher_wrt_summaries"),
-                name="double_derivative_of_fisher_wrt_summaries"),
-            name="derivative_of_fisher_wrt_summaries")
-
-    def get_numerical_fisher_derivative(self, Cinv, dμdθ, score, sign):
-        dFdx_a = tf.linalg.band_part(
-            tf.einsum(
-                "ijklm,nk->imljn",
-                tf.multiply(sign, self.d2μ_dθdx),
-                score), 0, -1)
-        dFdx_b = tf.linalg.band_part(
-            tf.einsum(
-                "ij,kljmn->knmil",
-                dμdθ,
-                tf.einsum(
-                    "ij,kljmn->klimn",
-                    Cinv,
-                    tf.multiply(sign, self.d2μ_dθdx))), 0, -1)
-        return tf.multiply(
-            0.5,
-            tf.add(
-                tf.add(
-                    dFdx_a,
-                    tf.transpose(
-                        dFdx_a,
-                        perm=[0, 1, 2, 4, 3])),
-                tf.add(
-                    dFdx_b,
-                    tf.transpose(
-                        dFdx_b,
-                        perm=[0, 1, 2, 4, 3]))))
-
-    def get_loss(self, Finv, Cinv, dμ_dθ, score, dC_dx):
-        dF_dx = self.get_fisher_derivative(Cinv, dμ_dθ, score, dC_dx)
-        return -tf.linalg.trace(
-            tf.einsum(
-                "ij,kljm->klim",
-                Finv,
-                dF_dx),
-            name="derivative_of_logdetfisher_wrt_summaries")
-
-    def get_num_loss(self, Finv, Cinv, dμ_dθ, score, dC_dx, sign):
-        dF_dx = self.get_numerical_fisher_derivative(Cinv, dμ_dθ, score, sign)
-        return -tf.linalg.trace(
-            tf.einsum(
-                "ij,klmjn->klmin",
-                Finv,
-                dF_dx),
-            name="derivative_of_logdetfisher_wrt_lower_summaries")
-
     def get_regularisation(self, C, Cinv):
         CmI = tf.subtract(C, self.identity)
         CinvmI = tf.subtract(Cinv, self.identity)
@@ -1538,53 +1387,6 @@ class IMNN():
                     regulariser,
                     e_rate))
         return r, e_rate
-
-    def get_regularisation_strength(self, regulariser):
-        r, e_rate = self.get_r(regulariser)
-        dr_dregulariser = tf.multiply(
-            r,
-            tf.add(
-                1.,
-                tf.divide(
-                    tf.multiply(
-                        tf.add(
-                            1.,
-                            tf.multiply(
-                                self.α,
-                                regulariser)),
-                        e_rate),
-                    tf.add(
-                        regulariser,
-                        e_rate))))
-        return r, dr_dregulariser
-
-    def get_regularisation_derivative(self, C, Cinv, dC_dx):
-        reg, CmI = self.get_regularisation(C, Cinv)
-        r, dr_dreg = self.get_regularisation_strength(reg)
-        Cinv2 = tf.einsum(
-            "ij,jk->ik",
-            Cinv,
-            Cinv)
-        Cinv3 = tf.einsum(
-            "ij,jk->ik",
-            Cinv2,
-            Cinv)
-        dreg_dx = tf.multiply(
-            tf.add(
-                tf.multiply(
-                    reg,
-                    dr_dreg),
-                r),
-            tf.linalg.trace(
-                tf.einsum(
-                    "ij,kjlm->kilm",
-                    tf.add(
-                        CmI,
-                        tf.subtract(
-                            Cinv2,
-                            Cinv3)),
-                    dC_dx)))
-        return dreg_dx, reg, r
 
     def set_regularisation_strength(self, ϵ, λ):
         self.λ = tf.Variable(λ, dtype=self.dtype, trainable=False,
