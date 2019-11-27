@@ -49,9 +49,8 @@ Although these precise versions may not be necessary, I have put them here to av
 import numpy as np
 import matplotlib.pyplot as plt
 import tensorflow as tf
-from IMNN.IMNN import IMNN
-from IMNN.ABC.ABC import ABC
-import IMNN.ABC.priors as priors
+from IMNN import IMNN
+from IMNN.ABC import ABC, priors
 ```
 
 # Summarising the mean and the variance
@@ -350,7 +349,7 @@ The IMNN only needs to be provided with the number of parameters in the model, t
 
 
 ```python
-imnn = IMNN(n_params=n_params, n_summaries=n_summaries, n_covariance_sims=n_s, n_derivative_sims=n_d, dtype=tf.float32, verbose=True)
+imnn = IMNN.IMNN(n_params=n_params, n_summaries=n_summaries, n_covariance_sims=n_s, n_derivative_sims=n_d, dtype=tf.float32, verbose=True)
 ```
 
     Using single dataset
