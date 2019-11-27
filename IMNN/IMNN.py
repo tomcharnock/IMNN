@@ -11,13 +11,13 @@ Use precomputed external covariance and derivatives
 """
 
 
-__version__ = '0.2a1'
+__version__ = '0.2a2'
 __author__ = "Tom Charnock"
 
 
 import tensorflow as tf
 import tqdm
-from utils.utils import utils
+from IMNN.utils import utils
 
 
 class IMNN():
@@ -130,7 +130,7 @@ class IMNN():
         initialise_attributes(int, int, int, int, tf.dtype)
             Initialises all attributes and sets necessary constants
         """
-        self.u = utils(verbose=verbose)
+        self.u = utils.utils(verbose=verbose)
         self.initialise_attributes(n_params, n_summaries, n_covariance_sims,
                                    n_derivative_sims, dtype)
 
