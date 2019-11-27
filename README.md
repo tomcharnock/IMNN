@@ -543,7 +543,7 @@ The ABC module takes in the _observed_ data, the prior and the function for obta
 
 
 ```python
-abc = ABC(real_data=real_data, prior=prior, F=imnn.MLE_F, get_MLE=imnn.get_MLE, simulator=simulator, seed=None, simulator_args={"input shape": input_shape})
+abc = ABC.ABC(real_data=real_data, prior=prior, F=imnn.MLE_F, get_MLE=imnn.get_MLE, simulator=simulator, seed=None, simulator_args={"input shape": input_shape})
 ```
 
 ## Gaussian approximation
