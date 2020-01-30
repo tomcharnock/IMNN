@@ -11,7 +11,7 @@ Use precomputed external covariance and derivatives
 """
 
 
-__version__ = '0.2a2'
+__version__ = '0.2a3'
 __author__ = "Tom Charnock"
 
 
@@ -33,6 +33,10 @@ class IMNN():
         32 bit or 64 TensorFlow tensor floats
     itype : TF type
         32 bit or 64 TensorFlow tensor integers
+    save : bool
+        whether to save the model
+    filename : str
+        directory to save the model
     n_params : int
         number of parameters in physical model
     n_summaries : int
@@ -107,7 +111,8 @@ class IMNN():
         history object for saving training statistics.
     """
     def __init__(self, n_params, n_summaries, n_covariance_sims,
-                 n_derivative_sims, dtype=tf.float32, verbose=True):
+                 n_derivative_sims, fast_train=True, dtype=tf.float32, 
+                 save=False, filename=None, verbose=True):
         """Initialises attributes and calculates useful constants
 
         Parameters
@@ -118,24 +123,32 @@ class IMNN():
             number of summaries to compress data to
         n_covariance_sims : int
             number of simulations to calculate summary covariance
-        n_covariance_sims : int
+        n_derivative_sims : int
             number of derivatives simulations to calculate derivative of mean
+        fast_train : bool
+            whether to train using entire graph at once or a vectorised loop
         dtype : TF type
             32 bit or 64 TensorFlow tensor floats (default tf.float32)
+        save : bool
+            whether to save the model
+        filename : str
+            name for saving the model
         verbose : bool
             whether to use verbose outputs in error checking module
 
         Calls
         _____
-        initialise_attributes(int, int, int, int, tf.dtype)
+        initialise_attributes(int, int, int, int, tf.dtype, bool, str)
             Initialises all attributes and sets necessary constants
         """
         self.u = utils.utils(verbose=verbose)
         self.initialise_attributes(n_params, n_summaries, n_covariance_sims,
-                                   n_derivative_sims, dtype)
+                                   n_derivative_sims, fast_train, dtype, save, 
+                                   filename)
 
     def initialise_attributes(self, n_params, n_summaries, n_covariance_sims,
-                              n_derivative_sims, dtype):
+                              n_derivative_sims, fast_train, dtype, save, 
+                              filename):
         """Initialises all attributes and sets necessary constants
 
         All attributes are set to None before they are loaded when
@@ -153,8 +166,14 @@ class IMNN():
             number of simulations to calculate summary covariance
         n_covariance_sims : int
             number of derivatives simulations to calculate derivative of mean
+        fast_train : bool
+            whether to train using entire graph at once or a vectorised loop
         dtype : TF type
             32 bit or 64 TensorFlow tensor floats (default tf.float32)
+        save : bool
+            whether to save the model
+        filename : str
+            name for saving the model
 
         Calls
         _____
@@ -173,7 +192,20 @@ class IMNN():
         else:
             self.dtype = tf.float32
             self.itype = tf.int32
+            
+        self.save = save
+        if self.save:
+            if filename is None:
+                self.filename = "model"
+            else:
+                self.filename = str(filename)
+        else:
+            self.filename = None
 
+        if fast_train:
+            self.trainer = self.fast_train
+        else:
+            self.trainer = self.loop_train
         self.n_params = self.u.positive_integer(n_params, "n_params")
         self.n_summaries = self.u.positive_integer(n_summaries, "n_summaries")
         self.n_s = self.u.positive_integer(
@@ -384,6 +416,24 @@ class IMNN():
         self.u.check_model(self.n_params, self.n_summaries)
         self.model = model
         self.optimiser = optimiser
+        if self.save:
+            self.model.save(self.filename)
+            
+    def load_model(self, optimiser, weights=None):
+        """Reloads a saved model
+        
+        Parameters
+        __________
+        optimiser : TF optimiser (keras or other)
+            optimisation operation to do weight updates using TF or keras
+        weights : str
+            filename for saving weights
+        """
+        self.model = tf.keras.models.load_model(self.filename)
+        self.optimiser = optimiser
+        if weights is not None:
+            self.model.load_weights(self.filename + "/" + weights + ".h5")
+            
 
     def load_fiducial(self, θ_fid, train):
         """Loads the fiducial parameters into a TF tensor
@@ -687,7 +737,8 @@ class IMNN():
     #                       .repeat(2),)
     #     return new_batch
 
-    def fit(self, n_iterations, reset=False, validate=False):
+    def fit(self, n_iterations, reset=False, validate=False, patience=None,
+            checkpoint=None, min_iterations=None):
         """Fitting routine for IMNN
 
         Can reset model if training goes awry and clear diagnostics.
@@ -702,6 +753,12 @@ class IMNN():
             whether to reset weights of the model and clear diagnostic values
         validate : bool
             whether to validate the model using preloaded dataset (not checked)
+        patience : int
+            number of iterations to check for early stopping
+        checkpoint : int
+            number of iterations at which to checkpoint
+        min_iterations : int
+            number of initial iterations before using patience
 
         Calls
         _____
@@ -712,20 +769,65 @@ class IMNN():
         loop_train(tensor, tensor, tensor, tensor, tensor, tensor) ->
                 tensor, tensor, tensor, tensor, tensor, tensor
             loop routine through entire training dataset to update weights
-        loop_validate(tensor, tensor, tensor, tensor, tensor, tensor) ->
+        fast_train(tensor, tensor, tensor, tensor, tensor, tensor) ->
+                tensor, tensor, tensor, tensor, tensor, tensor
+            update weights on entire training dataset
+        fast_validate(tensor, tensor, tensor, tensor, tensor, tensor) ->
                 tensor, tensor, tensor, tensor, tensor, tensor
             roop routine through entire validation dataset for diagnostics
         """
         if reset:
             self.initialise_history()
             self.model.reset_states()
+        if n_iterations is None:
+            n_iterations = int(1e10)
+        if checkpoint is not None:
+            if not self.save:
+                print("Need to save model for checkpointing to work.\n" +
+                      "Run IMNN.save=True;\n" +
+                      "IMNN.filename='save-directory-path';\n" +
+                      "IMNN.model.save(IMNN.filename)")
+            to_checkpoint = True
+            self.model.save_weights(self.filename + "/model_weights.h5")
+        else:
+            to_checkpoint = False
+        if patience is not None:
+            if not self.save:
+                print("Need to save model for patience to work.\n" +
+                      "Run IMNN.save=True;\n" +
+                      "IMNN.filename='save-directory-path';\n" +
+                      "IMNN.model.save(IMNN.filename)")
+            else:
+                print("Using patience length of " + str(patience) + 
+                      ". Maximum number of training iterations is " + 
+                      str(n_iterations) + ".")
+                print("Saving current model in " + self.filename)
+                self.model.save(self.filename)
+                self.model.save_weights(self.filename + "/model_weights.h5")
+                patience_counter = 0
+                this_iteration = 0
+                calculate_patience = True
+                if min_iterations is not None:
+                    min_reached = False
+                else:
+                    min_reached = True
+                if validate:
+                    patience_criterion = "val_det_F"
+                else:
+                    patience_criterion = "det_F"
+                if checkpoint is None:
+                    checkpoint = 1
+                    to_checkpoint = True
+        else:
+            calculate_patience = False
+                
         if self.u.isnotebook():
             bar = tqdm.tnrange(n_iterations, desc="Iterations")
         else:
             bar = tqdm.trange(n_iterations, desc="Iterations")
         for iterations in bar:
             self.F, self.C, self.Cinv, self.dμ_dθ, self.reg, self.r = \
-                self.loop_train(self.F, self.C, self.Cinv, self.dμ_dθ,
+                self.trainer(self.F, self.C, self.Cinv, self.dμ_dθ,
                                 self.reg, self.r)
             self.history["det_F"].append(self.F.numpy())
             self.history["det_C"].append(self.C.numpy())
@@ -733,9 +835,14 @@ class IMNN():
             self.history["dμ_dθ"].append(self.dμ_dθ.numpy())
             self.history["reg"].append(self.reg.numpy())
             self.history["r"].append(self.r.numpy())
+            postfix_dictionary = {
+                "det_F": self.history["det_F"][-1],
+                "det_C": self.history["det_C"][-1],
+                "det_Cinv": self.history["det_Cinv"][-1],
+                "r": self.history["r"][-1]}
             if validate:
                 self.F, self.C, self.Cinv, self.dμ_dθ, self.reg, self.r = \
-                    self.loop_validate(self.F, self.C, self.Cinv, self.dμ_dθ,
+                    self.fast_validate(self.F, self.C, self.Cinv, self.dμ_dθ,
                                        self.reg, self.r)
                 self.history["val_det_F"].append(self.F.numpy())
                 self.history["val_det_C"].append(self.C.numpy())
@@ -743,21 +850,41 @@ class IMNN():
                 self.history["val_dμ_dθ"].append(self.dμ_dθ.numpy())
                 self.history["val_reg"].append(self.reg.numpy())
                 self.history["val_r"].append(self.r.numpy())
-                bar.set_postfix(
-                    det_F=self.history["det_F"][-1],
-                    det_C=self.history["det_C"][-1],
-                    det_Cinv=self.history["det_Cinv"][-1],
-                    r=self.history["r"][-1],
-                    val_det_F=self.history["val_det_F"][-1],
-                    val_det_C=self.history["val_det_C"][-1],
-                    val_det_Cinv=self.history["val_det_Cinv"][-1],
-                    val_r=self.history["val_r"][-1])
-            else:
-                bar.set_postfix(
-                    det_F=self.history["det_F"][-1],
-                    det_C=self.history["det_C"][-1],
-                    det_Cinv=self.history["det_Cinv"][-1],
-                    r=self.history["r"][-1])
+                postfix_dictionary["val_det_F"] = self.history["val_det_F"][-1]
+                postfix_dictionary["val_det_C"] = self.history["val_det_C"][-1]
+                postfix_dictionary["val_det_Cinv"] = self.history["val_det_Cinv"][-1]
+                postfix_dictionary["val_r"] = self.history["val_r"][-1]
+            if to_checkpoint:
+                if calculate_patience:
+                    if min_reached:
+                        if (self.history[patience_criterion][-1] 
+                                <= self.history[patience_criterion][-2]):
+                            if patience_counter > patience:
+                                print("Reached " + str(patience) + " steps without increasing " 
+                                      + patience_criterion 
+                                      + ". Resetting weights to those from iteration " 
+                                      + str(this_iteration) + ".")
+                                self.model.load_weights(self.filename + "/model_weights.h5")
+                                break
+                            else:
+                                patience_counter += 1
+                        else:
+                            patience_counter = 0
+                            if iterations % checkpoint == 0:
+                                this_iteration = iterations
+                                self.model.save_weights(self.filename + "/model_weights.h5")        
+                    else:
+                        if iterations > min_iterations:
+                            min_reached = True
+                        if iterations % checkpoint == 0:
+                            this_iteration = iterations
+                            self.model.save_weights(self.filename + "/model_weights.h5")     
+                    postfix_dictionary["patience"] = patience_counter
+                else:
+                    if iterations % checkpoint == 0:
+                        this_iteration = iterations
+                        self.model.save_weights(self.filename + "/model_weights.h5")                                
+            bar.set_postfix(postfix_dictionary)
 
     def automatic_train(self, x, dx_dθ, dx_dw, d2x_dwdθ, s=None, ds_dθ=None):
         """Automatic calculation of gradients for updating weights
@@ -782,6 +909,11 @@ class IMNN():
         If numerical derivatives are used then we also need to include the
         response of the summaries for the derivatives on the network.
 
+
+        TODO
+        ____
+        - Finish writing this docstring
+        
         Parameters
         __________
 
@@ -822,7 +954,7 @@ class IMNN():
                     gradients[layer],
                     tf.divide(
                         tf.einsum(
-                            "ijkl,ijkl...->...",
+                            "ijkl,iklj...->...",
                             d2Λ_dxdθ,
                             d2x_dwdθ[layer]),
                         tf.dtypes.cast(
@@ -830,7 +962,7 @@ class IMNN():
                             self.dtype)))
         self.optimiser.apply_gradients(zip(gradients, self.model.variables))
         return F, C, Cinv, dμ_dθ, reg, r
-
+        
     def unpack_data(self, data, use_external):
         """ Unpacks zipped data and returns in regular format
 
@@ -880,6 +1012,56 @@ class IMNN():
                 ds_dθ = None
         return d, dd_dθ, s, ds_dθ
 
+    
+    @tf.function()
+    def fast_train(self, F, C, Cinv, dμ_dθ, reg, r):
+        """Automatic calculation of gradients for updating weights
+
+        The Fisher information is maximised by automatically calculating the
+        derivative of the logarithm of the determinant of the Fisher matrix
+        regularised by the Frobenius norm of the elementwise difference of the
+        summary covariance and the inverse covariance of the summaries from the
+        identity matrix. The regulariser is necessary to set the scale of the
+        summaries, i.e. the set of summaries which are preferably orthogonal
+        with covariance of I. The strength of the regularisation is smoothly
+        reduced as the summaries approach a covariance of I so that preference
+        is given to optimising the Fisher information matrix.
+
+        The gradients are calculated end-to-end in the graph and so it
+        necessitates relatively small inputs. If the inputs are too big for
+        fast_train(), then loop_train() can be used instead
+
+        TODO
+        ____
+        - Finish writing this docstring
+        
+        Parameters
+        __________
+
+        Returns
+        _______
+
+        Calls
+        _____
+        """
+        if self.single_dataset:
+            loop = self.dataset
+        else:
+            loop = zip(self.dataset, self.derivative_dataset)
+        for data in loop:
+            d, dd_dθ, s, ds_dθ = self.unpack_data(data, self.use_external)
+            with tf.GradientTape() as tape:
+                F, C, Cinv, dμ_dθ, _, _ = self.get_fisher(
+                    d, dd_dθ, self.numerical, self.use_external, s=s,
+                    ds_dθ=ds_dθ, δθ=self.δθ)
+                reg, _ = self.get_regularisation(C, Cinv)
+                r, _ = self.get_r(reg)
+                Λ = tf.subtract(tf.multiply(r, reg), tf.linalg.slogdet(F))
+            gradients = tape.gradient(Λ, self.model.variables)
+            self.optimiser.apply_gradients(zip(gradients, self.model.variables))
+        return tf.linalg.det(F), tf.linalg.det(C), tf.linalg.det(Cinv), \
+            dμ_dθ, reg, r
+    
     @tf.function
     def loop_train(self, F, C, Cinv, dμ_dθ, reg, r):
         """ Tensorflow dataset loop for training IMNN
@@ -962,7 +1144,13 @@ class IMNN():
                 dx_dθ, d2x_dwdθ = tf.vectorized_map(
                     lambda i: self.get_jacobian(
                         tf.expand_dims(i, 0)),
-                    dd_dθ)
+                    tf.reshape(dd_dθ, (self.n_d * 2 * self.n_params,) + self.model.input_shape[1:]))
+                dx_dθ = tf.reshape(dx_dθ, (self.n_d, 2, self.n_params, self.n_summaries))
+                d2x_dwdθ = [
+                    tf.reshape(
+                        d2x_dwdθ[i], 
+                        (self.n_d, 2, self.n_params, self.n_summaries) + self.model.variables[i].shape)
+                    for i in range(len(self.model.variables))]
             else:
                 x, dx_dd, dx_dw = tf.vectorized_map(
                     lambda i: self.get_jacobian(
@@ -977,7 +1165,7 @@ class IMNN():
             dμ_dθ, reg, r
 
     @tf.function
-    def loop_validate(self, F, C, Cinv, dμ_dθ, reg, r):
+    def fast_validate(self, F, C, Cinv, dμ_dθ, reg, r):
         """ Tensorflow dataset loop for validating IMNN
 
         All data in validation data set in looped over and summarised to
@@ -1105,7 +1293,12 @@ class IMNN():
         """
         if numerical:
             x = self.model(d)
-            dx_dθ = self.model(dd_dθ)
+            dx_dθ = tf.reshape(
+                self.model(
+                    tf.reshape(
+                        dd_dθ, 
+                        (self.n_d * 2 * self.n_params,) + self.model.input_shape[1:])), 
+                (self.n_d, 2, self.n_params, self.n_summaries))
         else:
             with tf.TapeGradient() as tape:
                 tape.watch(d)

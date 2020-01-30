@@ -18,11 +18,11 @@ $$\frac{\partial\mu_\mathscr{f}}{\partial\theta_\alpha} = \frac{1}{n_{\textrm{si
 We then use ${\bf C}_\mathscr{f}$ and $\boldsymbol{\mu}_\mathscr{f},_\alpha$ to calculate the Fisher information
 $${\bf F}_{\alpha\beta} = \boldsymbol{\mu}_\mathscr{f},^T_{\alpha}{\bf C}^{-1}_\mathscr{f}\boldsymbol{\mu}_\mathscr{f},_{\beta}.$$
 We want to maximise the Fisher information, and we want the summaries to be orthogonal so to train the network we minimise the loss function
-$$\Lambda = -\ln|{\bf F}_{\alpha\beta}|+r(\Lambda_2)\Lambda_2$$
+    $$\Lambda = -\ln|{\bf F}_{\alpha\beta}|+r(\Lambda_2)\Lambda_2$$
 where
-$$\Lambda_2 = ||{\bf C}_\mathscr{f}-\mathbb{1}||_2 + ||{\bf C}_\mathscr{f}^{-1}-\mathbb{1}||_2$$
+    $$\Lambda_2 = ||{\bf C}_\mathscr{f}-\mathbb{1}||_2 + ||{\bf C}_\mathscr{f}^{-1}-\mathbb{1}||_2$$
 is a regularisation term whose strength is dictated by
-$$r(\Lambda_2) = \frac{\lambda\Lambda_2}{\Lambda_2 + \exp(-\alpha\Lambda_2)}$$
+    $$r(\Lambda_2) = \frac{\lambda\Lambda_2}{\Lambda_2 + \exp(-\alpha\Lambda_2)}$$
 where $\lambda$ is a strength and $\alpha$ is a rate parameter which can be determined from a closeness condition on the Frobenius norm of the difference between the convariance (and inverse covariance) from the identity matrix.
 
 When using this code please cite <a href="https://arxiv.org/abs/1802.03537">arXiv:1802.03537</a>.<br><br>
@@ -40,6 +40,13 @@ This code is run using<br>
 >`tqdm==4.31.1`
 
 Although these precise versions may not be necessary, I have put them here to avoid possible conflicts.
+
+It is recommended to git pull this repo and then install the IMNN locally by running
+
+```
+python3 -m pip install --user -e .
+```
+
 
 ## Load modules
 
@@ -328,16 +335,32 @@ In principle `n_summaries` can be any number, but information loss is guaranteed
 n_summaries = n_params
 ```
 
-In keras we shall define a network with two hidden layers with 128 hidden nodes in each and every layer apart from the output activated using `tanh`. We shall optimise the network using the `Adam` optimiser on its default settings
+In keras we shall define a network with two hidden layers with 128 hidden nodes in each and every layer apart from the output activated using `LeakyReLU`. Since the vectorised conversion for `LeakyReLU` has not yet been defined in `keras` or `TensorFlow` we can define it as a custom `keras` layer.
+
+
+```python
+class LeakyReLU(tf.keras.layers.Layer):
+    def __init__(self, α, **kwargs):
+        self.α = α
+        super(LeakyReLU, self).__init__(**kwargs)
+    def build(self, input_shape):
+        super(LeakyReLU, self).build(input_shape)
+    def call(self, x):
+        return tf.where(tf.greater(x, 0) , x=x, y=tf.multiply(self.α, x))
+    def compute_output_shape(self, input_shape):
+        return input_shape
+```
+
+We shall optimise the network using the `Adam` optimiser on its default settings
 
 
 ```python
 model = tf.keras.Sequential(
     [tf.keras.Input(shape=input_shape),
      tf.keras.layers.Dense(128),
-     tf.keras.layers.Activation("tanh"),
+     LeakyReLU(0.01),
      tf.keras.layers.Dense(128),
-     tf.keras.layers.Activation("tanh"),
+     LeakyReLU(0.01),
      tf.keras.layers.Dense(n_summaries),
     ])
 opt = tf.keras.optimizers.Adam()
@@ -345,15 +368,17 @@ opt = tf.keras.optimizers.Adam()
 
 ## Initialise the IMNN module
 
-The IMNN only needs to be provided with the number of parameters in the model, the number of summaries output by the network and the number of simulations needed to approximate the covariance of the summaries and to approximate the mean of the derivative of the summaries with respect to the parameters. Optionally we can also choose whether to use 32 or 64 bit floats (and ints) in TensorFlow and choose whether or not to get verbose size checking whilst loading the model and the data.
+The IMNN only needs to be provided with the number of parameters in the model, the number of summaries output by the network and the number of simulations needed to approximate the covariance of the summaries and to approximate the mean of the derivative of the summaries with respect to the parameters. Optionally we can also choose whether to use 32 or 64 bit floats (and ints) in TensorFlow and choose whether or not to get verbose size checking whilst loading the model and the data. Depending on the size of the dataset (and network) that is being used, either all of the data can be passed through the network by using the default setting of `fast_train=True` or it can be vectorised looped through by setting `fast_train=False`.
 
 
 ```python
-imnn = IMNN.IMNN(n_params=n_params, n_summaries=n_summaries, n_covariance_sims=n_s, n_derivative_sims=n_d, dtype=tf.float32, verbose=True)
+imnn = IMNN.IMNN(n_params=n_params, n_summaries=n_summaries, n_covariance_sims=n_s, n_derivative_sims=n_d, fast_train=True, dtype=tf.float32, verbose=True, save=True)
 ```
 
     Using single dataset
 
+
+We can choose to save the keras model by passing `save=True` on initialisation. A directory to save the model can also be passed using `filename=directory`. If `save=True` and no filename is given then the directory will be set to `./model`.
 
 The network is then passed to the module using
 
@@ -363,7 +388,20 @@ imnn.set_model(model=model, optimiser=opt)
 ```
 
     Checking is not currently done on the model. Make sure that its output has shape (None, 2) for the fiducial values a nd (None, 2, 2, 2) for the derivative values.
+    WARNING:tensorflow:From /home/charnock/envs/tensorflow-2.0.0/lib/python3.7/site-packages/tensorflow_core/python/ops/resource_variable_ops.py:1781: calling BaseResourceVariable.__init__ (from tensorflow.python.ops.resource_variable_ops) with constraint is deprecated and will be removed in a future version.
+    Instructions for updating:
+    If using Keras pass *_constraint arguments to layers.
+    INFO:tensorflow:Assets written to: model/assets
 
+
+At any point the model can be saved by simply running `imnn.save_model(imnn.filename)`. To reload the model the optimiser needs to be recreated, but the model and weights can be recoverd using
+```python
+imnn.load_model(optimiser=opt, weights=None)
+```
+If a different set of weights are saved than when the model was last saved, the `.h5` file can be passed to the function - this `.h5` file must be in the model save directory (`imnn.filename`). For weights saved in `imnn.filename + "/model_weights.h5"` we can run
+```python
+imnn.load_model(optimiser=opt, weights="model_weights")
+```
 
 ## Load the data
 
@@ -422,11 +460,25 @@ We can now train the network. We just need to choose a number iterations of trai
 
 
 ```python
-imnn.fit(n_iterations=1000, validate=True)
+imnn.fit(n_iterations=None, validate=True, patience=50, checkpoint=50, min_iterations=500)
 ```
 
+    Using patience length of 50. Maximum number of training iterations is 10000000000.
+    Saving current model in model
+    INFO:tensorflow:Assets written to: model/assets
 
-    HBox(children=(IntProgress(value=0, description='Iterations', max=1000, style=ProgressStyle(description_width=…
+
+
+    HBox(children=(IntProgress(value=0, description='Iterations', max=10000000000, style=ProgressStyle(description…
+
+
+    WARNING:tensorflow:Layer dense is casting an input tensor from dtype float64 to the layer's dtype of float32, which is new behavior in TensorFlow 2.  The layer has dtype float32 because it's dtype defaults to floatx.
+
+    If you intended to run this layer in float32, you can safely ignore this warning. If in doubt, this warning is likely only an issue if you are porting a TensorFlow 1.X model to TensorFlow 2.
+
+    To change all layers to have dtype float64 by default, call `tf.keras.backend.set_floatx('float64')`. To change just this layer, pass dtype='float64' to the layer constructor. If you are the author of this layer, you can disable autocasting by passing autocast=False to the base Layer constructor.
+
+    Reached 50 steps without increasing val_det_F. Resetting weights to those from iteration 6350.
 
 
 Training can be continued simply by running the fit again.
@@ -437,6 +489,10 @@ n.fit(n_iterations=1000, validate=True, reset=True)
 ```
 
 Note that it is normal for the network to initially run slow and quite quickly speed up as the data flow from the dataset to the CPU is properly filled.
+
+Early stopping on the increase of the Fisher information can be performed by using `patience = x` where `x` should be an integer number of steps of allowed buffer for the Fisher information to descrease before breaking. When using patience, `n_iterations = None` can be passed so that the training keeps on running for some very large number of iterations, otherwise `n_iterations` acts as the maximum number of iterations. Since there is a constraint on the covariance, there is often a period at the beginning of training where the Fisher information may reduce, for that reason a `min_iterations` argument is provided. The patience early stopping only begins after `min_iterations` number of iterations. When validation data is being used the early stopping defaults to the Fisher information of the validation data.
+
+Without being set, the weights are saved on every training epoch, but this will be very costly in terms of training time. It is therefore advised to use `checkpoint` at some larger number. For example, `checkpoint = 100` will only save the model weights every 100 iterations. Note that the last possible model which can be reverted to will be then be at maximum 100 iterations before. `checkpoint` can be used without patience to save the weights of the model, which could be useful for very long runs.
 
 A history (imnn.history) dictionary is collecting diagnostics. It contains
 - `det_F` : determinant of the Fisher information
@@ -499,7 +555,7 @@ ax[3].set_xlabel("Number of epochs");
 ```
 
 
-![png](figures/output_58_0.png)
+![png](figures/output_63_0.png)
 
 
 ## Maximum likelihood estimates
@@ -523,7 +579,7 @@ The maxmimum likelihood estimate is then obtained by running `imnn.get_MLE(d)` o
 print("The maximum likelihood estimate of the real data is " + str(imnn.get_MLE(real_data)[0].numpy()))
 ```
 
-    The maximum likelihood estimate of the real data is [1.8213251 4.3077555]
+    The maximum likelihood estimate of the real data is [1.9187517 3.89256  ]
 
 
 ## Approximate Bayesian computation
@@ -560,12 +616,12 @@ plt.yticks([0, 1], [r"$\mu$", r"$\Sigma$"])
 plt.colorbar();
 ```
 
-    maximum likelihood estimate [1.8213251 4.3077555]
-    determinant of the Fisher information 67.50628
+    maximum likelihood estimate [1.9187517 3.89256  ]
+    determinant of the Fisher information 55.84487
 
 
 
-![png](figures/output_68_1.png)
+![png](figures/output_73_1.png)
 
 
 
@@ -605,7 +661,7 @@ ax[0, 1].axis("off");
 ```
 
 
-![png](figures/output_70_0.png)
+![png](figures/output_75_0.png)
 
 
 We can see that the maximum likelihood estimate for the mean is almost perfect whilst it is incorrect for the variance. However, we can now see the ABC does in its place.
@@ -628,7 +684,7 @@ reject_indices = np.argwhere(abc.ABC_dict["distances"] >= ϵ)[:, 0]
 print("Number of accepted samples = ", accept_indices.shape[0])
 ```
 
-    Number of accepted samples =  2319
+    Number of accepted samples =  636
 
 
 ### Plot samples
@@ -669,7 +725,7 @@ ax[1, 1].set_xlabel("$\Sigma$");
 ```
 
 
-![png](figures/output_77_0.png)
+![png](figures/output_82_0.png)
 
 
 
@@ -708,7 +764,7 @@ ax[0, 1].axis("off");
 ```
 
 
-![png](figures/output_78_0.png)
+![png](figures/output_83_0.png)
 
 
 We now get samples from the posterior disrtibution which is not too far from the analytic posterior, and is at least unbiased. However, many samples are rejected to achieve this, and the rejection is defined somewhat arbitrarily, making it very computationally heavy and uncertain. We can improve on this using a PMC.
@@ -725,7 +781,7 @@ The `PMC` can be continued by running again with a smaller criterion.
 abc.PMC(draws=2000, posterior=2000, criterion=0.01, at_once=True, save_sims=None)
 ```
 
-    iteration = 28, current criterion = 0.009747776288534179, total draws = 920480, ϵ = 0.08228597976267338.
+    iteration = 27, current criterion = 0.007457038139021562, total draws = 965916, ϵ = 0.17167608067393303.
 
 To restart the PMC from scratch then one can run
 ```python
@@ -763,7 +819,7 @@ ax[1, 1].set_xlabel("$\Sigma$");
 ```
 
 
-![png](figures/output_83_0.png)
+![png](figures/output_88_0.png)
 
 
 
@@ -804,7 +860,7 @@ ax[0, 1].axis("off");
 ```
 
 
-![png](figures/output_84_0.png)
+![png](figures/output_89_0.png)
 
 
 We can see that the IMNN can recover great posteriors even when the data is extremely far from the fiducial parameter value at which the network was trained! Woohoo - give yourself a pat on the back!
