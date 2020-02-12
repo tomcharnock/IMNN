@@ -6,7 +6,7 @@ Docstrings need writing
 """
 
 
-__version__ = '0.2a3'
+__version__ = '0.2a4'
 __author__ = "Tom Charnock"
 
 
@@ -16,153 +16,139 @@ import numpy as np
 
 class utils():
     def __init__(self, verbose=True):
-        self.verbose = verbose
+        self.verbose = True
+        self.verbose = self.type_checking(verbose, True, "verbose")
 
-    def positive_integer(self, param, name):
-        if type(param) != int:
-            error = True
-        elif param < 1:
-            error = True
-        else:
-            error = False
-            if error:
-                if self.verbose:
-                    print(name
-                          + " must be a positive integer but has a value of "
-                          + str(param))
-                sys.exit()
-            else:
-                return param
-
-    def bool_none(self, param):
-        if param is not None:
-            a = True
-        else:
-            a = False
-        return a
-
-    def type_warning(self, type, wanted, variable, message=None):
-        if type is None:
+    def type_checking(self, value, wanted, variable, message=None):
+        if value is None:
             if self.verbose:
                 print(variable + " cannot be None")
             sys.exit()
-        if type != wanted:
+        if type(value) != type(wanted):
             if self.verbose:
                 string = (variable + " is not of the correct type. It is a "
-                          + str(type) + " but it should be a " + str(wanted)
-                          + ". ")
+                          + str(type(value)) + " but it should be a "
+                          + str(type(wanted)) + ". ")
                 if message is not None:
                     string += message
                 print(string)
             sys.exit()
+        return value
 
-    def check_num_datasets(self, n_s, n_d):
-        if n_s == n_d:
+    def positive_integer(self, value, variable):
+        value = self.type_checking(value, 1, variable,
+                                   message="It should also be positive.")
+        if value < 1:
             if self.verbose:
-                print("Using single dataset")
-            return True
-        else:
-            if self.verbose:
-                print("Using different datasets for fiducial and derivative\
-simulations")
-            return False
-
-    def batch_warning(self, n_batch):
-        if n_batch is None:
-            error = True
-        elif type(n_batch) != int:
-            error = True
-        else:
-            error = False
-        if error:
-            if self.verbose:
-                print("Please set self.n_batch = total number of sims / number\
- of sims for covariance = total number of sims for derivative / number of sims\
- for derivative mean. This must be exactly divisible (int). The value provided\
- is " + str(n_batch))
+                print((variable
+                       + " must be a positive integer but has a value of "
+                       + str(value)))
             sys.exit()
+        return value
 
-    def batch_warning(self, shape, size, train, derivative=False):
-        n_batch = shape / size
-        if float(int(n_batch)) == n_batch:
-            return int(n_batch)
-        else:
+    def check_shape(self, value, type, shape, variable):
+        value = self.type_checking(
+            value, type, variable,
+            message="It should also have shape " + str(shape) + ".")
+        if value.shape != shape:
             if self.verbose:
-                print("n_batch = total number of sims / number of sims for cov\
-ariance must be exactly divisible (int). Note that total number of sims for \
-derivative / number of sims for derivative mean must be equal. The length of \
-the input data is " + str(shape) + " and the number of sims for the covariance\
-is " + str(size))
+                print((variable
+                       + " should have shape "
+                       + str(shape)
+                       + " but has a value of "
+                       + str(value.shape)))
             sys.exit()
+        return value
 
-    def size_check(self, new, original, new_name, original_name):
-        if new != original:
-            if self.verbose:
-                print("When providing " + new_name + " its size must be the be\
- the same as" + original_name + ". The size of " + new_name + " is " + str(new)
-                      + " and the size of " + original_name + " is "
-                      + str(original))
-            sys.exit()
-
-    def numerical_size_check(self, a, b, numerical):
-        if numerical:
-            if a != b:
-                if self.verbose:
-                    print("The number of upper and lower parameter simulations\
- for the numerical derivatives should be equal. This set contains lower parame\
-ter simulations (first element) = " + str(a) + " and upper parameter simulatio\
-ns (second element) = " + str(b) + ". Please check this. Note that for best \
-results the upper and lower parameter simulations should be seed matched and \
-place correspondingly in their arrays.")
-                sys.exit()
-        else:
-            if a != b:
-                if self.verbose:
-                    print("The number of derivatives of the simulation when do\
-ing the derivatives analytically must be the same as the number of fiducial si\
-mulations. Furthermore, these should come from corresponding seeds.")
-                sys.exit()
-
-    def fiducial_check(self, fiducial, n_params):
-        if type(fiducial) != np.ndarray:
-            error = True
-        elif fiducial.shape != (n_params,):
-            error = True
-        else:
-            error = False
-        if error:
-            if self.verbose:
-                print("fiducial must be a 1D numpy array of the fiducial param\
-eter values. It is a " + str(type(fiducial)) + " with values " + str(fiducial))
-            sys.exit()
-
-    def delta_check(self, delta, n_params):
-        message = "When using numerical derivatives the δθ for the derivatives\
- must be passed as a 1D numpy array of the difference between parameter values"
-        if type(delta) is not None:
-            if type(delta) != np.ndarray:
-                error = True
-            elif delta.shape != (n_params,):
-                error = True
-            else:
-                error = False
-            if error:
-                if self.verbose:
-                    print(message + " It is a " + str(type(delta))
-                          + " with values " + str(delta))
-                sys.exit()
-        else:
-            if self.verbose:
-                print(message)
-            sys.exit()
-
-    def check_model(self, params, summaries):
+    def data_error(self, validate=False):
         if self.verbose:
-            print("Checking is not currently done on the model. Make sure that\
- its output has shape " + str((None, summaries)) + " for the fiducial values a\
- nd "
-                  + str((None, 2, params, summaries)) + " for the derivative v\
-alues.")
+            if validate:
+                print("Both validatation_fiducial_loader and \
+validation_derivative_loader must be either numpy arrays OR callable functions\
+ to load the data into the dataset and be of the same type as the training \
+ data.")
+            else:
+                print("Both fiducial_loader and derivative_loader must be \
+either numpy arrays OR callable functions to load the data into the dataset")
+        sys.exit()
+
+    def regularisation_error(self):
+        if self.verbose:
+            if validate:
+                print("λ and ϵ must be passed to set the regularisation rate \
+and strength.")
+        sys.exit()
+
+    def save_error(self):
+        if self.verbose:
+            print("Need to save model for patience to work.\n" +
+                  "Run IMNN.save=True;\n" +
+                  "IMNN.filename='save-directory-path';\n" +
+                  "IMNN.model.save(IMNN.filename)")
+        sys.exit()
+
+    def check_model(self, model, input_shape, output_shape):
+        if not hasattr(model, "input_shape"):
+            if self.verbose:
+                print("model must have an input_shape attribute")
+            sys.exit()
+        if not hasattr(model, "output_shape"):
+            if self.verbose:
+                print("model must have an output_shape attribute")
+            sys.exit()
+        if not hasattr(model, "save"):
+            if self.verbose:
+                print("model must have an save function attribute")
+            sys.exit()
+        if not hasattr(model, "save_weights"):
+            if self.verbose:
+                print("model must have an save_weights function attribute")
+            sys.exit()
+        if not hasattr(model, "reset_states"):
+            if self.verbose:
+                print("model must have an reset_states function attribute")
+            sys.exit()
+        if model.input_shape[1:] != input_shape:
+            if self.verbose:
+                print("the model has an input shape of "
+                      + str(model.input_shape[1:])
+                      + " but the data has shape "
+                      + str(input_shape)
+                      + ". Cannot continue.")
+            sys.exit()
+        if model.output_shape[1:] != (output_shape,):
+            if self.verbose:
+                print("the model has an output shape of "
+                      + str(model.output_shape[1:])
+                      + " but the summary shape must be "
+                      + str((output_shape,))
+                      + ". Cannot continue.")
+            sys.exit()
+        return model
+
+    def at_once_checker(self, value, n_s, n_d, n_params):
+        value = self.positive_integer(value, "at_once")
+        if value > n_s:
+            if self.verbose:
+                print("at_once is greater than n_s - setting to n_s. You \
+should consider uploading data as a single tensor.")
+            fiducial_at_once = n_s
+        else:
+            fiducial_at_once = value
+        if value > n_d * n_params * 2:
+            if self.verbose:
+                print("at_once is greater than n_d * n_params * 2 - setting to\
+ n_d * n_params * 2.")
+            derivative_at_once = n_d * n_params * 2
+        elif value > n_d:
+            if self.verbose:
+                print("at_once is greater than n_d - setting at_once to n_d \
+for derivatives")
+            derivative_at_once = n_d
+        else:
+            derivatives_at_once = value
+        return fiducial_at_once, derivative_at_once
+
 
     def isnotebook(self):
         try:
