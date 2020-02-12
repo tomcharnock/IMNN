@@ -606,14 +606,12 @@ class IMNN():
         """
         if derivative:
             if validate:
-                return self.validation_derivative_dataset, \
-                    self.get_derivative_indices
+                return self.validation_derivative_dataset, self.get_derivative_indices
             else:
                 return self.derivative_dataset, self.get_derivative_indices
         else:
             if validate:
-                return self.validation_fiducial_dataset, \
-                    self.get_fiducial_indices
+                return self.validation_fiducial_dataset, self.get_fiducial_indices
             else:
                 return self.fiducial_dataset, self.get_fiducial_indices
 
