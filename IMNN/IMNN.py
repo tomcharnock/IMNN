@@ -66,7 +66,7 @@ class IMNN():
         derivatives of the data for validating IMNN (second index 0=-ve, 1=+ve)
     fiducial_at_once : int
         number of simulations to process at once if using TF.data.Dataset
-    derivatives_at_once : int
+    derivative_at_once : int
         number of simulations to process at once if using TF.data.Dataset
     fiducial_dataset : TF dataset
         dataset to grab large fiducial data for training IMNN

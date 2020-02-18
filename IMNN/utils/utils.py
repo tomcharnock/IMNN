@@ -146,7 +146,7 @@ should consider uploading data as a single tensor.")
 for derivatives")
             derivative_at_once = n_d
         else:
-            derivatives_at_once = value
+            derivative_at_once = value
         return fiducial_at_once, derivative_at_once
 
     def isnotebook(self, tqdm_notebook):
