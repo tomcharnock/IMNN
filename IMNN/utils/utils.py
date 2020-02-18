@@ -149,15 +149,17 @@ for derivatives")
             derivatives_at_once = value
         return fiducial_at_once, derivative_at_once
 
-
-    def isnotebook(self):
-        try:
-            shell = get_ipython().__class__.__name__
-            if shell == 'ZMQInteractiveShell':
-                return True   # Jupyter notebook or qtconsole
-            elif shell == 'TerminalInteractiveShell':
-                return False  # Terminal running IPython
-            else:
-                return False  # Other type (?)
-        except NameError:
+    def isnotebook(self, tqdm_notebook):
+        if not tqdm_notebook:
             return False
+        else:
+            try:
+                shell = get_ipython().__class__.__name__
+                if shell == 'ZMQInteractiveShell':
+                    return True   # Jupyter notebook or qtconsole
+                elif shell == 'TerminalInteractiveShell':
+                    return False  # Terminal running IPython
+                else:
+                    return False  # Other type (?)
+            except NameError:
+                return False

@@ -1286,7 +1286,8 @@ class IMNN():
                             self.μ)))))
 
     def fit(self, n_iterations, λ=None, ϵ=None, reset=False,
-            patience=None, checkpoint=None, min_iterations=None):
+            patience=None, checkpoint=None, min_iterations=None,
+            tqdm_notebook=True):
         """Fitting routine for IMNN
 
         Can reset model if training goes awry and clear diagnostics.
@@ -1309,6 +1310,8 @@ class IMNN():
             number of iterations at which to checkpoint
         min_iterations : int
             number of initial iterations before using patience
+        tqdm_notebook : bool
+            whether to use a notebook style tqdm progress bar
 
         Calls
         _____
@@ -1366,7 +1369,7 @@ class IMNN():
         else:
             calculate_patience = False
 
-        if self.u.isnotebook():
+        if self.u.isnotebook(tqdm_notebook):
             bar = tqdm.tnrange(n_iterations, desc="Iterations")
         else:
             bar = tqdm.trange(n_iterations, desc="Iterations")
