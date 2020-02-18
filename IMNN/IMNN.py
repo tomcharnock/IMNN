@@ -502,6 +502,9 @@ class IMNN():
             self.trainer = self.scatter
         elif ((type(fiducial_loader) == list)
                 and (type(derivative_loader) == list)):
+            self.fiducial_at_once, self.derivative_at_once = \
+                self.u.at_once_checker(at_once, self.n_s, self.n_d,
+                                       self.n_params)
             self.fiducial_dataset = self.build_tfrecord(fiducial_loader,
                                                         derivative=False)
             self.derivative_dataset = self.build_tfrecord(derivative_loader,
