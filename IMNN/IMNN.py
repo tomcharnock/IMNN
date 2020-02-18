@@ -703,7 +703,6 @@ class IMNN():
 
         dataset = tf.data.TFRecordDataset(
             filenames=loader,
-            buffer_size=tf.data.experimental.AUTOTUNE,
             num_parallel_reads=tf.data.experimental.AUTOTUNE)
         dataset = dataset.map(parser)
         dataset = dataset.batch(at_once)
