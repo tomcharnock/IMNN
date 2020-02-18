@@ -64,12 +64,13 @@ class utils():
         if self.verbose:
             if validate:
                 print("Both validatation_fiducial_loader and \
-validation_derivative_loader must be either numpy arrays OR callable functions\
- to load the data into the dataset and be of the same type as the training \
- data.")
+validation_derivative_loader must be either numpy arrays OR generators\
+ OR lists of .tfrecord files to load the data into the dataset and be of the\
+ same type as the training data.")
             else:
                 print("Both fiducial_loader and derivative_loader must be \
-either numpy arrays OR callable functions to load the data into the dataset")
+either numpy arrays OR generators OR lists of .tfrecord files to load the \
+data into the dataset")
         sys.exit()
 
     def regularisation_error(self):
@@ -149,7 +150,18 @@ for derivatives")
             derivative_at_once = value
         return fiducial_at_once, derivative_at_once
 
+    def check_input(self, value):
+        value = self.type_checking(value, tuple(), "input_shape")
+        for i, val in enumerate(value):
+            _ = self.type_checking(val, 1,
+                                   "index " + str(i) + " of input_shape")
+        if self.verbose:
+            print("input shape will be " + str(value))
+        return value
+
     def isnotebook(self, tqdm_notebook):
+        tqdm_notebook = self.type_checking(tqdm_notebook, True,
+                                           "tqdm_notebook")
         if not tqdm_notebook:
             return False
         else:

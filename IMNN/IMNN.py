@@ -98,7 +98,7 @@ class IMNN():
         history object for saving training statistics.
     """
     def __init__(self, n_s, n_d, n_params, n_summaries, model, optimiser,
-                 θ_fid, δθ, fiducial_loader, derivative_loader,
+                 θ_fid, δθ, input_shape, fiducial_loader, derivative_loader,
                  dtype=tf.float32, itype=tf.int32, save=False, verbose=True,
                  filename=None, at_once=None, validation_fiducial_loader=None,
                  validation_derivative_loader=None, map_fn=None,
@@ -123,15 +123,20 @@ class IMNN():
             fiducial parameter values for training dataset
         δθ : ndarray (n_params,)
             parameter differences for numerical derivatives
+        input_shape : tuple
+            shape of the input data
         at_once : int
             number of simulations to process at once if using TF.data.Dataset
-        fiducial_loader : ndarray (n_s,) + input_shape or func
+        fiducial_loader : ndarray (n_s,)+input_shape or func or list
             numpy array containing fiducial data or function returning same
-        derivative_loader : ndarray (n_d, 2, n_params) + input_shape or func
+        derivative_loader : ndarray (n_d, 2, n_params)+input_shape or func
+                or list
             numpy array containing derivative data or function returning same
-        validation_fiducial_loader : nd_array (n_s,) + input_shape or func
+        validation_fiducial_loader : nd_array (n_s,)+input_shape or func
+                or list
             numpy array containing fiducial data or function returning same
-        validation_derivative_loader : nd_array or func
+        validation_derivative_loader : nd_array (n_d, 2, n_params)+input_shape
+                or func or list
             numpy array containing derivative data or function returning same
         map_fn : func
             function for data augmentation when using TF datasets
@@ -156,8 +161,8 @@ class IMNN():
             Initialises all attributes and sets necessary constants
         set_tensors(ndarray, ndarray)
             sets useful tensors which can be precomputed
-        set_data(ndarray/gen, ndarray/gen, ndarray/gen, ndarray/gen,
-                 int, func, bool)
+        set_data(tuple, ndarray/gen/list, ndarray/gen/list, ndarray/gen/list,
+                 ndarray/gen/list, int, func, bool)
             builds the datasets and sets the functions to be used to train IMNN
         set_model(model, optimiser)
             loads the model and optimiser as attributes
@@ -167,7 +172,7 @@ class IMNN():
         self.init_attributes(n_s, n_d, n_params, n_summaries, dtype, itype,
                              save, filename, verbose)
         self.set_tensors(θ_fid, δθ)
-        self.set_data(fiducial_loader, derivative_loader,
+        self.set_data(input_shape, fiducial_loader, derivative_loader,
                       validation_fiducial_loader, validation_derivative_loader,
                       at_once, map_fn, check_shape)
         self.set_model(model, optimiser)
@@ -243,6 +248,7 @@ class IMNN():
 
         self.θ_fid = None
         self.δθ = None
+        self.input_shape = None
 
         self.data = None
         self.derivative = None
@@ -393,7 +399,7 @@ class IMNN():
             dtype=self.dtype,
             name="derivative_steps")
 
-    def set_data(self, fiducial_loader, derivative_loader,
+    def set_data(self, input_shape, fiducial_loader, derivative_loader,
                  validation_fiducial_loader, validation_derivative_loader,
                  at_once, map_fn, check_shape):
         """Builds the datasets and sets the functions to be used to train IMNN
@@ -417,13 +423,19 @@ class IMNN():
 
         Parameters
         __________
-        fiducial_loader : ndarray (n_s,) + input_shape or func
+        input_shape : tuple of ints
+            shape of the data to be fed through the network
+        fiducial_loader : ndarray (n_s,)+input_shape or func or
+                TFRecordDataset
             numpy array containing fiducial data or function returning same
-        derivative_loader : ndarray (n_d, 2, n_params) + input_shape or func
+        derivative_loader : ndarray (n_d, 2, n_params)+input_shape or func or
+                TFRecordDataset
             numpy array containing derivative data or function returning same
-        validation_fiducial_loader : nd_array (n_s,) + input_shape or func
+        validation_fiducial_loader : nd_array (n_s,)+input_shape or func or
+                TFRecordDataset
             numpy array containing fiducial data or function returning same
-        validation_derivative_loader : nd_array or func
+        validation_derivative_loader : nd_array (n_d, 2, n_params)+input_shape
+                or func or TFRecordDataset
             numpy array containing derivative data or function returning same
         at_once : int
             number of simulations to process at once
@@ -441,12 +453,9 @@ class IMNN():
         build_dataset(func, bool, opt(func))
             builder for the tf.data.Dataset based on loading function
         """
+        self.input_shape = self.u.check_input(input_shape)
         if ((type(fiducial_loader) is np.ndarray) and
                 (type(derivative_loader) is np.ndarray)):
-            self.input_shape = fiducial_loader.shape[1:]
-            if self.verbose:
-                print("input_shape = " + str(self.input_shape)
-                      + ". If this is not what you expected, check your data.")
             if check_shape:
                 fiducial_loader = self.u.check_shape(
                     fiducial_loader,
@@ -468,18 +477,35 @@ class IMNN():
             self.fiducial_at_once, self.derivative_at_once = \
                 self.u.at_once_checker(at_once, self.n_s, self.n_d,
                                        self.n_params)
-            temp_data = next(fiducial_loader(0))[0]
-            self.input_shape = temp_data.shape
-            del(temp_data)
-            if self.verbose:
-                print("input_shape = " + str(self.input_shape)
-                      + ". If this is not what you expected, check your data.")
+            if check_shape:
+                temp_data = next(fiducial_loader(0))[0]
+                _ = self.u.check_shape(
+                    temp_data,
+                    np.zeros(()),
+                    self.input_shape,
+                    "data from fiducial_loader")
+                del(temp_data, _)
+                temp_data = next(derivative_loader(0))[0]
+                _ = self.u.check_shape(
+                    temp_data,
+                    np.zeros(()),
+                    self.input_shape,
+                    "data from derivative_loader")
+                del(temp_data, _)
             self.fiducial_dataset = self.build_dataset(fiducial_loader,
                                                        derivative=False,
                                                        map_fn=map_fn)
             self.derivative_dataset = self.build_dataset(derivative_loader,
                                                          derivative=True,
                                                          map_fn=map_fn)
+            fast = False
+            self.trainer = self.scatter
+        elif ((type(fiducial_loader) == list)
+                and (type(derivative_loader) == list)):
+            self.fiducial_dataset = self.build_tfrecord(fiducial_loader,
+                                                        derivative=False)
+            self.derivative_dataset = self.build_tfrecord(derivative_loader,
+                                                          derivative=True)
             fast = False
             self.trainer = self.scatter
         else:
@@ -520,6 +546,16 @@ class IMNN():
                     validation_derivative_loader,
                     derivative=True,
                     map_fn=map_fn)
+                self.validater = self.scatter
+            elif ((not fast) and
+                    (type(fiducial_loader) == list) and
+                    (type(derivative_loader) == list)):
+                self.validation_fiducial_dataset = self.build_tfrecord(
+                    validation_fiducial_loader,
+                    derivative=False)
+                self.validation_derivative_dataset = self.build_tfrecord(
+                    validation_derivative_loader,
+                    derivative=True)
                 self.validater = self.scatter
             else:
                 self.u.data_error(validate=True)
@@ -584,6 +620,54 @@ class IMNN():
             dataset = dataset.map(
                 lambda data, indices:
                     (map_fn(data), indices))
+        dataset = dataset.batch(at_once)
+        return dataset.prefetch(tf.data.experimental.AUTOTUNE)
+
+    def fiducial_parser(self, example):
+        features = {
+            "index": tf.io.FixedLenFeature([], tf.int64),
+            "data": tf.io.FixedLenFeature([], tf.string)}
+        parsed_example = tf.io.parse_single_example(example, features)
+        data = tf.reshape(
+            tf.io.decode_raw(parsed_example["data"], self.dtype),
+            self.input_shape)
+        index = tf.cast(parsed_example["index"], self.itype)
+        return data, index
+
+    def derivative_parser(self, example):
+        features = {
+            "index": tf.io.FixedLenFeature([], tf.int64),
+            "data": tf.io.FixedLenFeature([], tf.string),
+            "derivative": tf.io.FixedLenFeature([], tf.int64),
+            "parameter": tf.io.FixedLenFeature([], tf.int64)}
+        parsed_example = tf.io.parse_single_example(example, features)
+        data = tf.reshape(
+            tf.io.decode_raw(parsed_example["data"], self.dtype),
+            self.input_shape)
+        index = tf.cast(parsed_example["index"], self.itype)
+        derivative = tf.cast(parsed_example["derivative"], self.itype)
+        parameter = tf.cast(parsed_example["parameter"], self.itype)
+        return data, (index, derivative, parameter)
+
+    def build_tfrecord(self, loader, derivative):
+        """Build tf.data.Dataset for the necessary datasets
+
+        Parameters
+        __________
+        loader : list of strings
+            filenames for the tfrecord
+        derivative : bool
+            whether the dataset is for the fiducial or derivative data
+        """
+        if derivative:
+            at_once = self.derivative_at_once
+            parser = self.derivative_parser
+        else:
+            at_once = self.fiducial_at_once
+            parser = self.fiducial_parser
+
+        dataset = tf.data.TFRecordDataset(filenames=loader)
+        dataset = dataset.map(parser)
         dataset = dataset.batch(at_once)
         return dataset.prefetch(tf.data.experimental.AUTOTUNE)
 
