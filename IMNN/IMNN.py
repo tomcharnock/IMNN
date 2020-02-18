@@ -627,6 +627,20 @@ class IMNN():
         return dataset.prefetch(tf.data.experimental.AUTOTUNE)
 
     def fiducial_parser(self, example):
+        """Parses the data from the .tfrecord byte stream
+
+        Parameters
+        __________
+        example : TF serialised data
+            the data and indices in a serialised format to be parsed
+
+        Returns
+        _______
+        data : TF tensor float input_shape
+            the parsed data for passing through the network
+        index : TF tensor int ()
+            the index of the simulation being grabbed
+        """
         features = {
             "index": tf.io.FixedLenFeature([], tf.int64),
             "data": tf.io.FixedLenFeature([], tf.string)}
@@ -638,6 +652,24 @@ class IMNN():
         return data, index
 
     def derivative_parser(self, example):
+        """Parses the data from the .tfrecord byte stream
+
+        Parameters
+        __________
+        example : TF serialised data
+            the data and indices in a serialised format to be parsed
+
+        Returns
+        _______
+        data : TF tensor float input_shape
+            the parsed data for passing through the network
+        index : TF tensor int ()
+            the index of the simulation being grabbed
+        derivative : TF tensor int ()
+            the index labelling the derivative
+        parameter : TF tensor int ()
+            the index labelling the parameter
+        """
         features = {
             "index": tf.io.FixedLenFeature([], tf.int64),
             "data": tf.io.FixedLenFeature([], tf.string),
@@ -653,7 +685,7 @@ class IMNN():
         return data, (index, derivative, parameter)
 
     def build_tfrecord(self, loader, derivative):
-        """Build tf.data.Dataset for the necessary datasets
+        """Build tf.data.Dataset from the list of .tfrecord files
 
         Parameters
         __________
@@ -669,7 +701,10 @@ class IMNN():
             at_once = self.fiducial_at_once
             parser = self.fiducial_parser
 
-        dataset = tf.data.TFRecordDataset(filenames=loader)
+        dataset = tf.data.TFRecordDataset(
+            filenames=loader,
+            buffer_size=tf.data.experimental.AUTOTUNE,
+            num_parallel_reads=tf.data.experimental.AUTOTUNE)
         dataset = dataset.map(parser)
         dataset = dataset.batch(at_once)
         return dataset.prefetch(tf.data.experimental.AUTOTUNE)
