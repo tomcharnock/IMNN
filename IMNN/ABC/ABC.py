@@ -10,7 +10,7 @@ properly ported at some point soon.
 """
 
 
-__version__ = '0.2a3'
+__version__ = '0.2a4'
 __author__ = "Tom Charnock"
 
 
