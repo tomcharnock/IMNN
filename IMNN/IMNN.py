@@ -1,25 +1,14 @@
-"""Information maximising neural network
-This module provides the methods necessary to build and train an information
-maximising neural network to optimally compress data down to the number of
-model parameters.
-
-TODO
-____
-Still some docstrings which need finishing
-Use precomputed external covariance and derivatives"""
-
-
-__version__ = '0.2a4'
+__version__ = '0.2a5'
 __author__ = "Tom Charnock"
-
 
 import tensorflow as tf
 import numpy as np
 import tqdm
-from IMNN.utils import utils
+import utils
+import pickle
 
 
-class IMNN():
+class IMNN:
     """Information maximising neural network
     The information maximising neural network class contains all the functions
     necessary to train a neural network to maximise the Fisher information of
@@ -34,8 +23,10 @@ class IMNN():
         32 bit or 64 TensorFlow tensor integers
     save : bool
         whether to save the model
+    directory : str
+        directory for loading and saving the model
     filename : str
-        directory to save the model
+        filename for loading and saving the model
     validate : bool
         whether to validate during training
     n_s : int
@@ -48,6 +39,8 @@ class IMNN():
         number of summaries to compress data to
     model : TF model - keras or other
         neural network to do the compression defined using TF or keras
+    variables : tuple of TF tensor float
+        the trainable variables of the model
     optimiser : TF optimiser - keras or other
         optimisation operation to do weight updates, defined using TF or keras
     θ_fid : TF tensor float (n_params,)
@@ -78,6 +71,8 @@ class IMNN():
         dataset to grab large derivative data for validating IMNN
     F : TF tensor float (n_params, n_params)
         Fisher information matrix
+    Finv : TF tensor float (n_params, n_params)
+        inverse Fisher information matrix
     C : TF tensor float (n_summaries, n_summaries)
         covariance of summaries
     Cinv : TF tensor float (n_summaries, n_summaries)
@@ -97,14 +92,14 @@ class IMNN():
     history : dict
         history object for saving training statistics.
     """
-    def __init__(self, n_s, n_d, n_params, n_summaries, model, optimiser,
-                 θ_fid, δθ, input_shape, fiducial_loader, derivative_loader,
-                 dtype=tf.float32, itype=tf.int32, save=False, verbose=True,
-                 filename=None, at_once=None, validation_fiducial_loader=None,
-                 validation_derivative_loader=None, map_fn=None,
-                 check_shape=True):
+    def __init__(self, n_s, n_d, n_params, n_summaries, 
+                 θ_fid, δθ, input_shape, fiducial, derivative, 
+                 validation_fiducial, validation_derivative, 
+                 model=None, optimiser=tf.keras.optimizers.Adam(),
+                 dtype=tf.float32, itype=tf.int32, save=False, load=False, weights=None, 
+                 verbose=True, directory=None, filename=None, at_once=None, 
+                 map_fn=None, check_shape=True):
         """Initialises attributes and calculates useful constants
-
         Parameters
         __________
         n_s : int
@@ -127,15 +122,15 @@ class IMNN():
             shape of the input data
         at_once : int
             number of simulations to process at once if using TF.data.Dataset
-        fiducial_loader : ndarray (n_s,)+input_shape or func or list
+        fiducial : ndarray (n_s,)+input_shape or func or list
             numpy array containing fiducial data or function returning same
-        derivative_loader : ndarray (n_d, 2, n_params)+input_shape or func
+        derivative : ndarray (n_d, 2, n_params)+input_shape or func
                 or list
             numpy array containing derivative data or function returning same
-        validation_fiducial_loader : nd_array (n_s,)+input_shape or func
+        validation_fiducial : nd_array (n_s,)+input_shape or func
                 or list
             numpy array containing fiducial data or function returning same
-        validation_derivative_loader : nd_array (n_d, 2, n_params)+input_shape
+        validation_derivative : nd_array (n_d, 2, n_params)+input_shape
                 or func or list
             numpy array containing derivative data or function returning same
         map_fn : func
@@ -146,13 +141,18 @@ class IMNN():
             tensorflow interger size
         save : bool
             whether to save the model
+        load : bool
+            whether to load the model on initialisation
+        weights : str
+            filename for the weights to be loaded
         filename : str
-            name for saving the model
+            filename for loading and saving the model
+        directory : str
+            directory for loading and saving the model
         verbose : bool
             whether to use verbose outputs in error checking module
         check_shape : bool
             whether to check the shape of the model and the data
-
         Calls
         _____
         IMNN.utils.utils.type_checking(any, type, str, opt(str))
@@ -170,22 +170,21 @@ class IMNN():
         self.u = utils.utils(verbose=verbose)
         check_shape = self.u.type_checking(check_shape, True, "check_shape")
         self.init_attributes(n_s, n_d, n_params, n_summaries, dtype, itype,
-                             save, filename, verbose)
+                             save, filename, directory, verbose)
         self.set_tensors(θ_fid, δθ)
-        self.set_data(input_shape, fiducial_loader, derivative_loader,
-                      validation_fiducial_loader, validation_derivative_loader,
+        self.set_data(input_shape, fiducial, derivative,
+                      validation_fiducial, validation_derivative,
                       at_once, map_fn, check_shape)
-        self.set_model(model, optimiser)
+        load = self.u.type_checking(load, True, "load")
+        self.set_model(model, optimiser, load=load, weights=weights)
 
     def init_attributes(self, n_s, n_d, n_params, n_summaries,
-                        dtype, itype, save, filename, verbose):
+                        dtype, itype, save, filename, directory, verbose):
         """Initialises all attributes and sets necessary constants
-
         All attributes are set to None before they are loaded when
         necessary. The number of parameters and summaries are set and
         the number of simulations needed for the covariance and derivatives
         of the mean summaries is set.
-
         Parameters
         __________
         n_s : int
@@ -203,10 +202,11 @@ class IMNN():
         save : bool
             whether to save the model
         filename : str
-            name for saving the model
+            filename for loading and saving the model
+        directory : str
+            directory for loading and saving the model
         verbose : bool
             whether to use verbose outputs in error checking module
-
         Calls
         _____
         initialise_history()
@@ -227,6 +227,12 @@ class IMNN():
 
         self.save = self.u.type_checking(save, True, "save")
         if self.save:
+            if directory is None:
+                self.directory = "."
+            else:
+                self.directory = self.u.type_checking(directory,
+                                                      "hello",
+                                                      "directory")
             if filename is None:
                 self.filename = "model"
             else:
@@ -244,6 +250,7 @@ class IMNN():
         self.history = self.initialise_history()
 
         self.model = None
+        self.variables = None
         self.optimiser = None
 
         self.θ_fid = None
@@ -277,10 +284,9 @@ class IMNN():
 
     def initialise_history(self):
         """Sets up dictionary of lists for collecting training diagnostics
-
         Dictionary of all diagnostics which can be collected during training.
         These are:
-            det_F - determinant of Fisher information
+            det_F - determinant of Fisher inselformation
             val_det_F - determinant of Fisher information from validation
             det_C - determinant of covariance of summaries
             val_det_C - determinant of covariance of validation summaries
@@ -304,33 +310,50 @@ class IMNN():
             "r": [],
         }
 
-    def set_model(self, model, optimiser):
+    def set_model(self, model, optimiser, load=False, weights=None):
         """Loads functional neural network and optimiser as attributes
-
         Parameters
         __________
         model : TF model (keras or other)
             neural network to do the compression defined using TF or keras
         optimiser : TF optimiser (keras or other)
             optimisation operation to do weight updates using TF or keras
-
+        load : bool
+            whether to load a previous model from file
+        weights : str
+            filename for weights to be loaded if different from loaded model
         Calls
         _____
+        load_model(optimiser, str)
+            loads a previously saved model
         check_model(model, tuple, int)
             checks that model takes expected input shape and output n_summaries
         """
-        self.model = self.u.check_model(model,
-                                        self.input_shape,
-                                        self.n_summaries)
-        self.optimiser = optimiser
-        if self.save:
-            if self.verbose:
-                print("saving model to " + self.filename)
-            self.model.save(self.filename)
+        if load:
+            self.load_model(optimiser, weights=weights)
+            self.variables = self.model.get_weights()
+        else:    
+            self.model = self.u.check_model(model,
+                                            self.input_shape,
+                                            self.n_summaries)
+            self.variables = self.model.get_weights()
+            self.optimiser = optimiser
+            if self.save:
+                if self.verbose:
+                    print("saving model to {}".format("/".join((self.directory, self.filename))))
+                self.model.save("/".join((self.directory, self.filename)))
+                
+    def update_variables(self, variables):
+            """Updates the initial model trainable variables
+            Parameters
+            __________
+            variables : tuple of TF tensor floats
+                stored trainable variabels
+            """
+            self.variables = variables
 
     def load_model(self, optimiser, weights=None):
         """Reloads a saved model
-
         Parameters
         __________
         optimiser : TF optimiser (keras or other)
@@ -338,27 +361,33 @@ class IMNN():
         weights : str
             filename for saving weights
         """
-        self.model = tf.keras.models.load_model(self.filename)
+        self.model = tf.keras.models.load_model("/".join((self.directory, self.filename)))
         self.optimiser = optimiser
+        psave = self.save
+        self.save = False
+        self.fit(n_iterations=1, λ=10., ϵ=0.01, reset=False,
+            patience=None, checkpoint=None, min_iterations=None,
+            tqdm_notebook=False, weight_file="weights")
+        self.save = psave
+        with open("{}.pkl".format("/".join((self.directory, self.filename, 'optimizer'))), "rb") as f:
+            weight_values = pickle.load(f)
+        self.optimiser.set_weights(weight_values)
         if weights is not None:
-            self.model.load_weights(self.filename + "/" + weights + ".h5")
+            self.model.load_weights("{}.h5".format("/".join((self.directory, self.filename, weights))))
 
     def set_tensors(self, θ_fid, δθ):
         """Makes TF tensors for necessary objects which can be precomputed
-
         Sets up the loop variable tensors for training and validation and
         calculates the derivative of the mean summaries with respect to outputs
         which can be precomputed. Also makes tensor float version of number of
         simulations for summary covariance and this value minus 1 for unbiased
         covariance calculation. The identity matrix is also defined.
-
         Parameters
         __________
         θ_fid : ndarray (n_params,)
             fiducial parameter values for training dataset
         δθ : ndarray (n_params,)
             parameter differences for numerical derivatives
-
         Calls
         _____
         IMNN.utils.utils.check_shape(any, type, tuple, str, opt(str))
@@ -399,11 +428,10 @@ class IMNN():
             dtype=self.dtype,
             name="derivative_steps")
 
-    def set_data(self, input_shape, fiducial_loader, derivative_loader,
-                 validation_fiducial_loader, validation_derivative_loader,
+    def set_data(self, input_shape, fiducial, derivative,
+                 validation_fiducial, validation_derivative,
                  at_once, map_fn, check_shape):
         """Builds the datasets and sets the functions to be used to train IMNN
-
         fiducial_loader and derivative_loader must both be either np.ndarrays
         with shape (n_s,) + input_shape and (n_d, 2, n_params) + input_shape
         respectively, or generators which take a single index and yield the
@@ -412,29 +440,26 @@ class IMNN():
         index which is 0 for the lower simulations and 1 for the upper
         simulations and a parameter index labelling which parameter is selected
         and returns the data and a tuple of the three indices.
-
         Loaders can be passed for the validation data. It is strictly necessary
         to have the same type of loaders for training and validation (both
         ndarray or both generators).
-
         If data augmentation is part of the pipeline this can be performed on
         the data by passing a map_fn which is a function that takes in one
         piece of data and augments it and returns just the one output.
-
         Parameters
         __________
         input_shape : tuple of ints
             shape of the data to be fed through the network
-        fiducial_loader : ndarray (n_s,)+input_shape or func or
+        fiducial : ndarray (n_s,)+input_shape or func or
                 TFRecordDataset
             numpy array containing fiducial data or function returning same
-        derivative_loader : ndarray (n_d, 2, n_params)+input_shape or func or
+        derivative : ndarray (n_d, 2, n_params)+input_shape or func or
                 TFRecordDataset
             numpy array containing derivative data or function returning same
-        validation_fiducial_loader : nd_array (n_s,)+input_shape or func or
+        validation_fiducial : nd_array (n_s,)+input_shape or func or
                 TFRecordDataset
             numpy array containing fiducial data or function returning same
-        validation_derivative_loader : nd_array (n_d, 2, n_params)+input_shape
+        validation_derivative : nd_array (n_d, 2, n_params)+input_shape
                 or func or TFRecordDataset
             numpy array containing derivative data or function returning same
         at_once : int
@@ -443,7 +468,6 @@ class IMNN():
             function for data augmentation when using TF datasets
         check_shape : bool
             whether to check the shape of the model and the data
-
         Calls
         _____
         IMNN.utils.utils.check_shape(any, type, tuple, str, opt(str))
@@ -454,123 +478,122 @@ class IMNN():
             builder for the tf.data.Dataset based on loading function
         """
         self.input_shape = self.u.check_input(input_shape)
-        if ((type(fiducial_loader) is np.ndarray) and
-                (type(derivative_loader) is np.ndarray)):
+        if ((type(fiducial) is np.ndarray) and
+                (type(derivative) is np.ndarray)):
             if check_shape:
-                fiducial_loader = self.u.check_shape(
-                    fiducial_loader,
+                fiducial = self.u.check_shape(
+                    fiducial,
                     np.zeros(()),
                     (self.n_s,) + self.input_shape,
-                    "fiducial_loader")
-                derivative_loader = self.u.check_shape(
-                    derivative_loader,
+                    "fiducial")
+                derivative = self.u.check_shape(
+                    derivative,
                     np.zeros(()),
                     (self.n_d, 2, self.n_params) + self.input_shape,
-                    "derivative_loader")
-            self.data = tf.convert_to_tensor(fiducial_loader,
+                    "derivative")
+            self.data = tf.convert_to_tensor(fiducial,
                                              dtype=self.dtype)
-            self.derivative = tf.convert_to_tensor(derivative_loader,
+            self.derivative = tf.convert_to_tensor(derivative,
                                                    dtype=self.dtype)
             fast = True
             self.trainer = self.fast_train
-        elif callable(fiducial_loader) and callable(derivative_loader):
+        elif callable(fiducial) and callable(derivative):
             self.fiducial_at_once, self.derivative_at_once = \
                 self.u.at_once_checker(at_once, self.n_s, self.n_d,
                                        self.n_params)
             if check_shape:
-                temp_data = next(fiducial_loader(0))[0]
+                temp_data = next(fiducial(0))[0]
                 _ = self.u.check_shape(
                     temp_data,
                     np.zeros(()),
                     self.input_shape,
-                    "data from fiducial_loader")
+                    "data from fiducial")
                 del(temp_data, _)
-                temp_data = next(derivative_loader(0))[0]
+                temp_data = next(derivative(0, 0, 0))[0]
                 _ = self.u.check_shape(
                     temp_data,
                     np.zeros(()),
                     self.input_shape,
-                    "data from derivative_loader")
+                    "data from derivative")
                 del(temp_data, _)
-            self.fiducial_dataset = self.build_dataset(fiducial_loader,
+            self.fiducial_dataset = self.build_dataset(fiducial,
                                                        derivative=False,
                                                        map_fn=map_fn)
-            self.derivative_dataset = self.build_dataset(derivative_loader,
+            self.derivative_dataset = self.build_dataset(derivative,
                                                          derivative=True,
                                                          map_fn=map_fn)
             fast = False
             self.trainer = self.scatter
-        elif ((type(fiducial_loader) == list)
-                and (type(derivative_loader) == list)):
+        elif ((type(fiducial) == list)
+                and (type(derivative) == list)):
             self.fiducial_at_once, self.derivative_at_once = \
                 self.u.at_once_checker(at_once, self.n_s, self.n_d,
                                        self.n_params)
-            self.fiducial_dataset = self.build_tfrecord(fiducial_loader,
+            self.fiducial_dataset = self.build_tfrecord(fiducial,
                                                         derivative=False)
-            self.derivative_dataset = self.build_tfrecord(derivative_loader,
+            self.derivative_dataset = self.build_tfrecord(derivative,
                                                           derivative=True)
             fast = False
             self.trainer = self.scatter
         else:
             self.u.data_error()
 
-        if ((validation_fiducial_loader is not None)
-                and (validation_derivative_loader is not None)):
+        if ((validation_fiducial is not None)
+                and (validation_derivative is not None)):
             self.validate = True
             if ((fast) and
-                    (type(validation_fiducial_loader) is np.ndarray) and
-                    (type(validation_derivative_loader) is np.ndarray)):
+                    (type(validation_fiducial) is np.ndarray) and
+                    (type(validation_derivative) is np.ndarray)):
                 if check_shape:
-                    validation_fiducial_loader = self.u.check_shape(
-                        validation_fiducial_loader,
+                    validation_fiducial = self.u.check_shape(
+                        validation_fiducial,
                         np.zeros(()),
                         (self.n_s,) + self.input_shape,
-                        "validation_fiducial_loader")
-                    validation_derivative_loader = self.u.check_shape(
-                        validation_derivative_loader,
+                        "validation_fiducial")
+                    validation_derivative = self.u.check_shape(
+                        validation_derivative,
                         np.zeros(()),
                         (self.n_d, 2, self.n_params) + self.input_shape,
-                        "validation_derivative_loader")
+                        "validation_derivative")
                 self.validation_data = tf.convert_to_tensor(
-                    validation_fiducial_loader,
+                    validation_fiducial,
                     dtype=self.dtype)
                 self.validation_derivative = tf.convert_to_tensor(
-                    validation_derivative_loader,
+                    validation_derivative,
                     dtype=self.dtype)
                 self.validater = self.run_fisher
             elif ((not fast) and
-                    callable(validation_fiducial_loader) and
-                    callable(validation_derivative_loader)):
+                    callable(validation_fiducial) and
+                    callable(validation_derivative)):
                 self.validation_fiducial_dataset = self.build_dataset(
-                    validation_fiducial_loader,
+                    validation_fiducial,
                     derivative=False,
                     map_fn=map_fn)
                 self.validation_derivative_dataset = self.build_dataset(
-                    validation_derivative_loader,
+                    validation_derivative,
                     derivative=True,
                     map_fn=map_fn)
                 self.validater = self.scatter
             elif ((not fast) and
-                    (type(fiducial_loader) == list) and
-                    (type(derivative_loader) == list)):
+                    (type(fiducial) == list) and
+                    (type(derivative) == list)):
                 self.validation_fiducial_dataset = self.build_tfrecord(
-                    validation_fiducial_loader,
+                    validation_fiducial,
                     derivative=False)
                 self.validation_derivative_dataset = self.build_tfrecord(
-                    validation_derivative_loader,
+                    validation_derivative,
                     derivative=True)
                 self.validater = self.scatter
             else:
                 self.u.data_error(validate=True)
-        elif ((validation_fiducial_loader is None) and
-              (validation_derivative_loader is None)):
+        elif ((validation_fiducial is None) and
+              (validation_derivative is None)):
             self.validate = False
         else:
             self.u.data_error(validation=True)
 
     def build_dataset(self, loader, derivative, map_fn):
         """Build tf.data.Dataset for the necessary datasets
-
         Parameters
         __________
         loader : generator
@@ -624,41 +647,38 @@ class IMNN():
                 lambda data, indices:
                     (map_fn(data), indices))
         dataset = dataset.batch(at_once)
-        return dataset.prefetch(tf.data.experimental.AUTOTUNE)
+        dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
+        return dataset.cache()
 
     def fiducial_parser(self, example):
         """Parses the data from the .tfrecord byte stream
-
         Parameters
         __________
         example : TF serialised data
             the data and indices in a serialised format to be parsed
-
         Returns
         _______
         data : TF tensor float input_shape
             the parsed data for passing through the network
-        index : TF tensor int ()
+        seed : TF tensor int ()
             the index of the simulation being grabbed
         """
         features = {
-            "index": tf.io.FixedLenFeature([], tf.int64),
+            "seed": tf.io.FixedLenFeature([], tf.int64),
             "data": tf.io.FixedLenFeature([], tf.string)}
         parsed_example = tf.io.parse_single_example(example, features)
         data = tf.reshape(
             tf.io.decode_raw(parsed_example["data"], self.dtype),
             self.input_shape)
-        index = tf.cast(parsed_example["index"], self.itype)
-        return data, index
+        seed = tf.cast(parsed_example["seed"], self.itype)
+        return data, seed
 
     def derivative_parser(self, example):
         """Parses the data from the .tfrecord byte stream
-
         Parameters
         __________
         example : TF serialised data
             the data and indices in a serialised format to be parsed
-
         Returns
         _______
         data : TF tensor float input_shape
@@ -671,7 +691,7 @@ class IMNN():
             the index labelling the parameter
         """
         features = {
-            "index": tf.io.FixedLenFeature([], tf.int64),
+            "seed": tf.io.FixedLenFeature([], tf.int64),
             "data": tf.io.FixedLenFeature([], tf.string),
             "derivative": tf.io.FixedLenFeature([], tf.int64),
             "parameter": tf.io.FixedLenFeature([], tf.int64)}
@@ -679,14 +699,13 @@ class IMNN():
         data = tf.reshape(
             tf.io.decode_raw(parsed_example["data"], self.dtype),
             self.input_shape)
-        index = tf.cast(parsed_example["index"], self.itype)
+        index = tf.cast(parsed_example["seed"], self.itype)
         derivative = tf.cast(parsed_example["derivative"], self.itype)
         parameter = tf.cast(parsed_example["parameter"], self.itype)
         return data, (index, derivative, parameter)
 
     def build_tfrecord(self, loader, derivative):
         """Build tf.data.Dataset from the list of .tfrecord files
-
         Parameters
         __________
         loader : list of strings
@@ -706,18 +725,17 @@ class IMNN():
             num_parallel_reads=tf.data.experimental.AUTOTUNE)
         dataset = dataset.map(parser)
         dataset = dataset.batch(at_once)
-        return dataset.prefetch(tf.data.experimental.AUTOTUNE)
+        dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
+        return dataset.cache()
 
     def set_dataset(self, derivative, validate):
         """Grabs the necessary dataset and the function to create indices
-
         Parameters
         __________
         derivative : bool
             whether the dataset is for derivatives or not
         validate : bool
             whether the dataset is for validation or training
-
         Returns
         _______
         dataset : TF dataset
@@ -738,12 +756,10 @@ class IMNN():
 
     def get_fiducial_indices(self, index):
         """Constructs the mesh of indices for scattering fiducial summaries
-
         Parameters
         __________
         index : TF tensor int (batch,)
             the indices of the data to aggregate summaries
-
         Returns
         _______
             indices : TF tensor int (batch, n_summaries)
@@ -758,14 +774,11 @@ class IMNN():
 
     def get_derivative_indices(self, index):
         """Constructs the mesh of indices for scattering derivative summaries
-
         This is performed as a vectorised mapping of meshgrid.
-
         Parameters
         __________
         index : tuple(tf.int, tf.int, tf.int) (batch, 3)
             the indices of the data to aggregate summaries
-
         Returns
         _______
         indices : TF tensor int (batch, n_summaries, 4)
@@ -786,7 +799,6 @@ class IMNN():
 
     def get_summaries(self, x, derivative=False, validate=False):
         """Passes the data through the model and aggregates it to a tensor
-
         Parameters
         __________
         x : TF tensor float (n_s, n_summaries)/(n_d, 2, n_params, n_summaries)
@@ -795,12 +807,10 @@ class IMNN():
             whether the dataset is for derivatives or not
         validate : bool
             whether the dataset is for validation or training
-
         Returns
         _______
         x : TF tensor float (n_s, n_summaries)/(n_d, 2, n_params, n_summaries)
             summaries outputted from the network
-
         Calls
         _____
         set_dataset(bool, bool)
@@ -821,16 +831,13 @@ class IMNN():
 
     def get_covariance(self, x):
         """Calculates covariance, mean and difference of mean from summaries
-
         Calculates the mean of the summaries and then finds the difference
         between the mean and each summary. This can then be used to calculate
         the covariance of the summaries.
-
         Parameters
         __________
         x : TF tensor float (n_s, n_summaries)
             summaries output by the model
-
         Returns
         _______
         C : TF tensor float (n_summaries, n_summaries)
@@ -850,17 +857,14 @@ class IMNN():
 
     def get_dμ_dθ(self, dx_dθ):
         """ Calculates the mean of the derivative of the summaries
-
         Numerically, we take away the simulations generated above the fiducial
         parameter values from the simulations generated below the fiducial
         parameter values and divide them by the difference between the
         upper and lower parameter values.
-
         Parameters
         _________
         dx_dθ : TF tensor float (n_d, 2, n_params, n_summaries)
             upper and lower parameter value summaries for numerical derivative
-
         Returns
         _______
         dμ_dθ : TF tensor float (n_params, n_summaries)
@@ -876,7 +880,6 @@ class IMNN():
 
     def get_fisher(self, Cinv, dμ_dθ):
         """Calculate Fisher information matrix
-
         Parameters
         __________
         Cinv : TF tensor float (n_summaries, n_summaries) or
@@ -885,7 +888,6 @@ class IMNN():
         dμ_dθ : TF tensor float (n_params, n_summaries) or
                                 (n_params, n_summaries + n_external)
             derivative mean summaries wrt parameters
-
         Returns
         _______
         F : TF tensor float (n_params, n_params)
@@ -901,18 +903,15 @@ class IMNN():
 
     def get_regularisation(self, C, Cinv):
         """Calculate the regulariser to set scale of the summaries
-
         The Frobenius norm of the difference between the covariance and the
         inverse covariance from the identity is calculated to set the scale of
         the summaries outputted by the IMNN.
-
         Parameters
         __________
         C : TF tensor float (n_summaries, n_summaries)
             covariance of the summaries
         Cinv : TF tensor float (n_summaries, n_summaries)
             inverse covariance of the summaries
-
         Returns
         _______
         regularisation : TF tensor float ()
@@ -932,18 +931,15 @@ class IMNN():
 
     def get_r(self, regularisation):
         """Dynamical coupling strength for the regularisation
-
         To make sure there is a smooth surface which turns off the
         regularisation, we use a dynamical coupling strength which goes from
         zero when the covariance is identity to some strength λ when the
         covariance is away from identity. The rate of this is controlled by how
         close to the identity we want the covariance to be.
-
         Parameters
         __________
         regularisation : TF tensor float ()
             value of the regularisation term
-
         Returns
         _______
         r : TF tensor float ()
@@ -957,7 +953,6 @@ class IMNN():
 
     def get_loss(self, F, regularisation, r):
         """Calculate the loss function (-log(det(F)) + regularisation)
-
         Parameters
         __________
         F : TF tensor float (n_params, n_params)
@@ -966,7 +961,6 @@ class IMNN():
             Frobenium norm of difference between C and I and Cinv and I
         r : TF tensor float ()
             dynamic regulariser coupling strength determined by regularisation
-
         Returns
         _______
         Λ : TF tensor float ()
@@ -978,14 +972,12 @@ class IMNN():
 
     def calculate_fisher(self, x, dx_dθ):
         """Calculate necessary stats to get fisher information
-
         Parameters
         __________
         x : TF tensor float (n_s, n_summaries)
             summaries output by the model
         dx_dθ : TF tensor float (n_d, 2, n_params, n_summaries)
             upper and lower parameter value summaries for numerical derivative
-
         Returns
         _______
         F : TF tensor float (n_params, n_params)
@@ -998,7 +990,6 @@ class IMNN():
             mean of the summaries
         dμ_dθ : TF tensor float (n_params, n_summaries)
             derivative of mean summaries with respect to the parameters
-
         Calls
         _____
         get_covariance(tensor)
@@ -1015,7 +1006,6 @@ class IMNN():
 
     def calculate_loss(self, F, C, Cinv):
         """Calculate the regularisation and loss function
-
         Parameters
         __________
         F : TF tensor float (n_params, n_params)
@@ -1024,7 +1014,6 @@ class IMNN():
             covariance of summaries
         Cinv : TF tensor float (n_summaries, n_summaries)
             inverse covariance of summaries
-
         Returns
         _______
         Λ : TF tensor float ()
@@ -1033,7 +1022,6 @@ class IMNN():
             value of the regularisation term
         r : TF tensor float ()
             value of the dynamical regularisation coupling strength
-
         Calls
         _____
         get_regularisation(tensor, tensor)
@@ -1050,16 +1038,13 @@ class IMNN():
 
     def get_fisher_gradient(self, x, dx_dθ):
         """Calculates the gradient of the loss with respect to the summaries
-
         From the summaries, the Fisher information matrix and loss function can
         be calculated, and the gradient taken and returned
-
         Parameters
         __________
         x : tensor (n_s, n_summaries)
             summaries output by the network
         dx_dθ : tensor (n_d, 2, n_params, n_summaries)
-
         Returns
         _______
         F : TF tensor float (n_params, n_params)
@@ -1078,7 +1063,6 @@ class IMNN():
             value of regulariser
         r : TF tensor float ()
             value of the dynamical coupling strength of the regulariser
-
         Calls
         _____
         calculate_fisher(tensor, tensor)
@@ -1095,23 +1079,19 @@ class IMNN():
 
     def get_network_gradient(self, dΛdx, derivative=False):
         """Calculates aggregated gradient of the loss with respect to the model
-
         Using the gradient of the loss with respect to the model we collect and
         aggregate the gradient of the loss with respect to the model parameters
         by passing the data through the model in batches for a second time.
-
         Parameters
         __________
         dΛdx : tensor float (n_s, n_summaries)/(n_d, 2, n_params, n_summaries)
             derivative of the loss function with respect to the summaries
         derivative : bool
             whether or not the derivative gradient is being calculated
-
         Returns
         _______
         gradient : list of tensor (len(model.variables))
             gradients of the loss function with respect to model parameters
-
         Calls
         _____
         set_dataset(bool, bool)
@@ -1136,7 +1116,6 @@ class IMNN():
     @tf.function
     def scatter(self, F, C, Cinv, μ, dμ_dθ, reg=None, r=None, validate=False):
         """Scattered calculation of Fisher information and gradients
-
         The Fisher information is maximised by automatically calculating the
         derivative of the logarithm of the determinant of the Fisher matrix
         regularised by the Frobenius norm of the elementwise difference of the
@@ -1147,14 +1126,12 @@ class IMNN():
         reduced as the summaries approach a covariance of the identity matrix
         so that preference is given to optimising the Fisher information
         matrix.
-
         Batches of data are passed through the model and the summaries are
         collected and the statistics are then calculated via these scattered
         tensors. If scatter is being used to train the model then the data is
         passed through the model a second time to calculate aggregated
         gradients. This method is somewhat slower than running directly with
         tensors, but is necssary for large data
-
         Parameters
         __________
         F : TF tensor float (n_params, n_params)
@@ -1173,7 +1150,6 @@ class IMNN():
             value of the dynamical coupling strength of the regulariser
         validate : bool
             whether the data is validation data or not
-
         Returns
         _______
         F : TF tensor float (n_params, n_params)
@@ -1190,7 +1166,6 @@ class IMNN():
             value of regulariser
         r : TF tensor float ()
             value of the dynamical coupling strength of the regulariser
-
         Calls
         _____
         get_summaries(tensor, bool, bool)
@@ -1230,7 +1205,6 @@ class IMNN():
     @tf.function
     def run_fisher(self, F, C, Cinv, μ, dμ_dθ, validate=True):
         """Calculation of the Fisher information by passing data through model
-
         Parameters
         __________
         F : TF tensor float (n_params, n_params)
@@ -1245,7 +1219,6 @@ class IMNN():
             derivative of mean summaries with respect to the parameters
         validate : bool
             whether the data is validation data or not
-
         Returns
         _______
         F : TF tensor float (n_params, n_params)
@@ -1258,7 +1231,6 @@ class IMNN():
             mean of the summaries
         dμ_dθ : TF tensor float (n_params, n_summaries)
             derivative of mean summaries with respect to the parameters
-
         Calls
         _____
         calculate_fisher(tensor, tensor)
@@ -1280,9 +1252,8 @@ class IMNN():
         return self.calculate_fisher(x, dx_dθ)
 
     @tf.function
-    def fast_train(self, F, C, Cinv, μ, dμ_dθ, reg, r):
+    def fast_train(self, F, C, Cinv, μ, dμ_dθ, regularisation, r):
         """Automatic calculation of gradients for updating weights
-
         The Fisher information is maximised by automatically calculating the
         derivative of the logarithm of the determinant of the Fisher matrix
         regularised by the Frobenius norm of the elementwise difference of the
@@ -1293,11 +1264,9 @@ class IMNN():
         reduced as the summaries approach a covariance of the identity matrix
         so that preference is given to optimising the Fisher information
         matrix.
-
         The gradients are calculated end-to-end in the graph and so it
         necessitates relatively small inputs. If the inputs are too big for
         fast_train(), then the data needs to be initialised as a dataset,
-
         Parameters
         __________
         F : TF tensor float (n_params, n_params)
@@ -1310,11 +1279,10 @@ class IMNN():
             mean of the summaries
         dμ_dθ : TF tensor float (n_params, n_summaries)
             derivative of mean summaries with respect to the parameters
-        reg : TF tensor float ()
+        regularisation : TF tensor float ()
             value of regulariser
         r : TF tensor float ()
             value of the dynamical coupling strength of the regulariser
-
         Returns
         _______
         F : TF tensor float (n_params, n_params)
@@ -1327,11 +1295,10 @@ class IMNN():
             mean of the summaries
         dμ_dθ : TF tensor float (n_params, n_summaries)
             derivative of mean summaries with respect to the parameters
-        reg : TF tensor float ()
+        regularisation : TF tensor float ()
             value of regulariser
         r : TF tensor float ()
             value of the dynamical coupling strength of the regulariser
-
         Calls
         _____
         run_fisher(tensor, tensor, tensor, tensor, tensor, bool)
@@ -1345,11 +1312,10 @@ class IMNN():
             Λ, regularisation, r = self.calculate_loss(F, C, Cinv)
         gradients = tape.gradient(Λ, self.model.variables)
         self.optimiser.apply_gradients(zip(gradients, self.model.variables))
-        return F, C, Cinv, μ, dμ_dθ, reg, r
+        return F, C, Cinv, μ, dμ_dθ, regularisation, r
 
     def get_regularisation_rate(self, λ, ϵ):
         """Calculate the dynamical coupling stregth turn over rate
-
         Paramaters
         __________
         λ : float
@@ -1378,43 +1344,57 @@ class IMNN():
                             ϵ)))),
             ϵ)
 
-    def get_MLE(self, d):
-        """Calculates MLE from score compression-like expansion
-
+    def get_estimate(self, d):
+        """Calculates estimate from score compression-like expansion
         Parameters
         __________
         d : TF tensor float (None,) + input_shape
-
         Returns
         _______
-        MLE : TF tensor float (None, n_params)
-            value of the MLE estimated via the IMNN
+        estimate : TF tensor float (None, n_params)
+            value of the estimate from the IMNN
         """
         self.Finv = tf.linalg.inv(self.F)
         return tf.add(
             self.θ_fid,
             tf.einsum(
-                "ij,kj->ki",
-                self.Finv,
-                tf.einsum(
-                    "ij,kj->ki",
-                    self.dμ_dθ,
-                    tf.einsum(
-                        "ij,kj->ki",
-                        self.Cinv,
-                        tf.subtract(
-                            self.model(d),
-                            self.μ)))))
+                "ij,jk,kl,ml->mi", 
+                self.Finv, 
+                self.dμ_dθ, 
+                self.Cinv,
+                tf.subtract(
+                    self.model(d),
+                    self.μ)))
+    
+    def save_estimator(self, filename):
+        """Save the parameters necessary to make an estimate using the IMNN
+        
+        Parameters
+        __________
+        filename : str
+            filename to save the estimator parameters
+        """
+        np.savez(filename, Finv=np.linalg.inv(self.F.numpy()), θ_fid=self.θ_fid,
+                 dμ_dθ=self.dμ_dθ.numpy(), Cinv=self.Cinv.numpy(), μ=self.μ.numpy())
 
-    def fit(self, n_iterations, λ=None, ϵ=None, reset=False,
+    def save_history(self):
+        """Save the history parameters
+
+        Parameters
+        __________
+        filename : str
+            filename to save the estimator parameters
+        """
+        history_dict = dict((k, v) for k,v in self.history.iteritems() if k not in ("dμ_dθ", "val_dμ_dθ"))
+        np.savetxt("{}.txt".format("/".join((self.directory, self.filename, "history"))), np.transpose(np.array(tuple(history_dict.values()))))
+
+    def fit(self, n_iterations=None, λ=10., ϵ=0.01, reset=False,
             patience=None, checkpoint=None, min_iterations=None,
-            tqdm_notebook=True):
+            tqdm_notebook=True, weight_file="weights"):
         """Fitting routine for IMNN
-
         Can reset model if training goes awry and clear diagnostics.
         Diagnostics are collected after one whole pass through the data.
         Validation can also be done if validation set is defined.
-
         Parameters
         __________
         n_iterations : int
@@ -1433,67 +1413,60 @@ class IMNN():
             number of initial iterations before using patience
         tqdm_notebook : bool
             whether to use a notebook style tqdm progress bar
-
+        weight_file : str
+            filename for the weights (default: "weights")
         Calls
         _____
         initialise_history()
             sets up dictionary of lists for collecting training diagnostics
-
         IMNN.utils.utils.isnotebook()
             checks whether IMNN being trained in jupyter notebook
-
         """
         if reset:
-            self.initialise_history()
-            self.model.reset_states()
+            self.history = self.initialise_history()
+            self.model.set_weights(self.variables)
         if n_iterations is None:
             n_iterations = int(1e10)
-        if (self.λ is None) or (self.α is None):
-            self.get_regularisation_rate(λ, ϵ)
-        elif (λ is not None) and (ϵ is not None):
-            self.get_regularisation_rate(λ, ϵ)
+            total = float("inf")
         else:
-            self.u.regularisation_error()
+            total = n_iterations
+        
+        self.get_regularisation_rate(λ, ϵ)
 
         if checkpoint is not None:
             if not self.save:
                 if self.verbose:
                     self.u.save_error()
             to_checkpoint = True
-            self.model.save_weights(self.filename + "/model_weights.h5")
+            self.model.save_weights("{}.h5".format("/".join(
+                (self.directory, self.filename, weight_file))))
         else:
             to_checkpoint = False
         if patience is not None:
-            if not self.save:
-                self.u.save_error()
+            if self.verbose:
+                print("Using patience length of {}. Maximum number "
+                      "of training iterations is {}.".format(
+                          patience, n_iterations))
+                print("Saving current model in {}".format(
+                    "/".join((self.directory, self.filename))))
+            weights = self.model.get_weights()
+            patience_counter = 0
+            this_iteration = 0
+            calculate_patience = True
+            min_reached = False
+            if min_iterations is None:
+                min_iterations = 1
+            if self.validate:
+                patience_criterion = "val_det_F"
             else:
-                if self.verbose:
-                    print("Using patience length of " + str(patience) +
-                          ". Maximum number of training iterations is " +
-                          str(n_iterations) + ".")
-                    print("Saving current model in " + self.filename)
-                self.model.save(self.filename)
-                self.model.save_weights(self.filename + "/model_weights.h5")
-                patience_counter = 0
-                this_iteration = 0
-                calculate_patience = True
-                min_reached = False
-                if min_iterations is None:
-                    min_iterations = 1
-                if self.validate:
-                    patience_criterion = "val_det_F"
-                else:
-                    patience_criterion = "det_F"
-                if checkpoint is None:
-                    checkpoint = 1
-                    to_checkpoint = True
+                patience_criterion = "det_F"
         else:
             calculate_patience = False
 
         if self.u.isnotebook(tqdm_notebook):
-            bar = tqdm.tnrange(n_iterations, desc="Iterations")
+            bar = tqdm.tqdm_notebook(range(n_iterations), total=total, desc="Iterations")
         else:
-            bar = tqdm.trange(n_iterations, desc="Iterations")
+            bar = tqdm.tqdm(range(n_iterations), total=total, desc="Iterations")
         for iterations in bar:
             self.F, self.C, self.Cinv, self.μ, self.dμ_dθ, self.reg, self.r = \
                 self.trainer(self.F, self.C, self.Cinv, self.μ, self.dμ_dθ,
@@ -1522,39 +1495,99 @@ class IMNN():
                 postfix_dictionary["val_det_C"] = self.history["val_det_C"][-1]
                 postfix_dictionary["val_det_Cinv"] = \
                     self.history["val_det_Cinv"][-1]
-            if to_checkpoint:
-                if calculate_patience:
-                    if min_reached:
-                        if (self.history[patience_criterion][-1]
-                                <= self.history[patience_criterion][-2]):
-                            if patience_counter > patience:
-                                print("Reached " + str(patience)
-                                      + " steps without increasing "
-                                      + patience_criterion
-                                      + ". Resetting weights to iteration "
-                                      + str(this_iteration) + ".")
-                                self.model.load_weights(
-                                    self.filename + "/model_weights.h5")
-                                break
-                            else:
-                                patience_counter += 1
+            if calculate_patience:
+                if min_reached:
+                    if (self.history[patience_criterion][-1]
+                            <= this_Fisher):
+                        if patience_counter > patience:
+                            print("Reached {} steps without increasing {}. "
+                                  "Resetting weights to iteration {}.".format(
+                                      patience, patience_criterion, this_iteration))
+                            self.model.set_weights(weights)
+                            self.F, self.C, self.Cinv, self.μ, self.dμ_dθ = \
+                                self.validater(self.F, self.C, self.Cinv, self.μ,
+                                   self.dμ_dθ, validate=True)
+                            break
                         else:
-                            patience_counter = 0
-                            if iterations % checkpoint == 0:
-                                this_iteration = iterations
-                                self.model.save_weights(
-                                    self.filename + "/model_weights.h5")
+                            patience_counter += 1
                     else:
-                        if iterations > min_iterations:
-                            min_reached = True
-                        if iterations % checkpoint == 0:
-                            this_iteration = iterations
-                            self.model.save_weights(
-                                self.filename + "/model_weights.h5")
-                    postfix_dictionary["patience"] = patience_counter
-                else:
-                    if iterations % checkpoint == 0:
+                        patience_counter = 0
                         this_iteration = iterations
-                        self.model.save_weights(
-                            self.filename + "/model_weights.h5")
+                        this_Fisher = self.history[patience_criterion][-1]
+                        weights = self.model.get_weights()
+                else:
+                    if iterations > min_iterations:
+                        min_reached = True
+                    this_iteration = iterations
+                    this_Fisher = self.history[patience_criterion][-1]
+                    weights = self.model.get_weights()
+                postfix_dictionary["patience"] = patience_counter
+            if to_checkpoint:
+                if iterations % checkpoint == 0:
+                    this_iteration = iterations
+                    self.model.save_weights("{}.h5".format("/".join(
+                        (self.directory, self.filename, weight_file))))
+                    self.save_estimator("{}.npz".format("/".join(
+                        (self.directory, self.filename, "estimator"))))
+                    symbolic_weights = getattr(self.optimiser, 'weights')
+                    weight_values = tf.keras.backend.batch_get_value(symbolic_weights)
+                    with open("{}.pkl".format("/".join((self.directory, self.filename, 'optimizer'))), "wb") as f:
+                        pickle.dump(weight_values, f)
+            if self.save:
+                self.save_history()
             bar.set_postfix(postfix_dictionary)
+        if self.save:
+            self.save_history()
+            self.model.save_weights("{}.h5".format("/".join(
+                (self.directory, self.filename, weight_file))))
+            self.save_estimator("{}.npz".format("/".join(
+                (self.directory, self.filename, "estimator"))))
+            symbolic_weights = getattr(self.optimiser, 'weights')
+            weight_values = tf.keras.backend.batch_get_value(symbolic_weights)
+            with open("{}.pkl".format("/".join((self.directory, self.filename, 'optimizer'))), "wb") as f:
+                pickle.dump(weight_values, f)
+            
+            
+    def plot(self, regulariser=True, known_det_fisher=None, figsize=(10, 15)):
+        import matplotlib.pyplot as plt
+        if regulariser:
+            fig, ax = plt.subplots(3, 1, sharex=True, figsize=figsize)
+        else:
+            fig, ax = plt.subplots(2, 1, sharex=True, figsize=(figsize[0], figsize[1] * 2 / 3))
+        plt.subplots_adjust(hspace=0)
+        epochs = np.arange(1, len(self.history["det_F"]) + 1)
+        ax[0].plot(epochs, self.history["det_F"], color="C0",
+           label=r'$|{\bf F}_{\alpha\beta}|$ from training data')
+        ax[0].plot(epochs, self.history["val_det_F"], color="C1",
+           label=r'$|{\bf F}_{\alpha\beta}|$ from validation data')
+        if known_det_fisher is not None:
+            ax[0].axhline(known_det_fisher, color="black", 
+                          linestyle="dashed")
+        ax[0].legend(frameon=False)
+        ax[0].set_xlim([1, epochs[-1]])
+        ax[0].set_ylabel(r"$|{\bf F}_{\alpha\beta}|$")
+        ax[1].plot(epochs, self.history["det_C"], color="C0",
+           label=r'$|{\bf C}|$ from training data')
+        ax[1].plot(epochs, self.history["val_det_C"], color="C1",
+           label=r'$|{\bf C}|$ from validation data')
+        ax[1].plot(epochs, self.history["det_Cinv"], color="C0",
+                   linestyle="dashed", 
+                   label=r'$|{\bf C}^{-1}|$ from training data')
+        ax[1].plot(epochs, self.history["val_det_Cinv"], color="C1", 
+                   linestyle="dashed",
+                   label=r'$|{\bf C}^{-1}|$ from validation data')
+        ax[1].axhline(1., color="black", linestyle="dashed")
+        ax[1].legend(frameon=False, loc="best")
+        ax[1].set_ylabel(r"$|{\bf C}|$ and $|{\bf C}^{-1}|$")
+        ax[1].set_xlim([1, epochs[-1]])
+        ax[1].set_yscale("log")
+        if regulariser:
+            a, = ax[2].semilogy(epochs, self.history["reg"],
+                       label=r'$\Lambda_2$ from training data')
+            ax[2].set_ylabel(r"$\Lambda_2$")
+            ax[2].set_xlim([1, epochs[-1]])
+            ax2 = ax[2].twinx()
+            b, = ax2.plot(epochs, self.history["r"],
+                          linestyle="dashed",
+                          label=r'$r$ from training data')
+            ax2.set_ylabel(r"$r$")
