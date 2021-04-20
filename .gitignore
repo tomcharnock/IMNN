@@ -1,0 +1,11 @@
+__pycache__/
+IMNN.egg-info/
+build/
+dist/
+.eggs/
+*.npz
+*.DS_Store
+.ipynb_checkpoints/
+*.tfrecords
+*.pdf
+*~
