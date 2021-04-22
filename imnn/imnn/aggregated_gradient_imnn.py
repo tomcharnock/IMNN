@@ -109,18 +109,18 @@ class AggregatedGradientIMNN(_AggregatedIMNN, GradientIMNN):
         The simulations generated at the fiducial model parameter values used
         for calculating the covariance of network outputs and their
         derivatives with respect to the physical model parameters
-        (for fitting). These are served ``n_per_device`` at at time as a
+        (for fitting). These are served ``n_per_device`` at a time as a
         numpy iterator from a TensorFlow dataset.
     remaining : list of tf.data.Dataset().as_numpy_iterators()
         The ``n_s - n_d`` simulations generated at the fiducial model parameter
         values used for calculating the covariance of network outputs with a
         derivative counterpart (for fitting). These are served ``n_per_device``
-        at at time as a numpy iterator from a TensorFlow dataset.
+        at a time as a numpy iterator from a TensorFlow dataset.
     validation_main : list of tf.data.Dataset().as_numpy_iterators()
         The simulations generated at the fiducial model parameter values used
         for calculating the covariance of network outputs and their
         derivatives with respect to the physical model parameters
-        (for validation). These are served ``n_per_device`` at at time as a
+        (for validation). These are served ``n_per_device`` at a time as a
         numpy iterator from a TensorFlow dataset.
     validation_remaining : list of tf.data.Dataset().as_numpy_iterators()
         The ``n_s - n_d`` simulations generated at the fiducial model parameter

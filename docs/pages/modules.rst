@@ -1,4 +1,4 @@
-Specific IMNN modules
+Specific IMNN classes
 =====================
 
 SimulatorIMNN

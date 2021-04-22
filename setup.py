@@ -5,7 +5,7 @@ import setuptools
 #     long_description = fh.read()
 
 setuptools.setup(
-    name="IMNN",
+    name="imnn",
     version="0.3dev",
     author="Tom Charnock",
     author_email="charnock@iap.fr",

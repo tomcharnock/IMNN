@@ -460,24 +460,24 @@ class DatasetNumericalGradientIMNN(AggregatedNumericalGradientIMNN):
     fiducial : list of tf.data.Dataset().as_numpy_iterators()
         The simulations generated at the fiducial model parameter values used
         for calculating the covariance of network outputs (for fitting). These
-        are served ``n_per_device`` at at time as a numpy iterator from a
+        are served ``n_per_device`` at a time as a numpy iterator from a
         TensorFlow dataset.
     derivative : list of tf.data.Dataset().as_numpy_iterators()
         The simulations generated at parameter values perturbed from the
         fiducial used to calculate the numerical derivative of network outputs
         with respect to model parameters (for fitting).  These are served
-        ``n_per_device`` at at time as a numpy iterator from a TensorFlow
+        ``n_per_device`` at a time as a numpy iterator from a TensorFlow
         dataset.
     validation_fiducial : list of tf.data.Dataset().as_numpy_iterators()
         The simulations generated at the fiducial model parameter values used
         for calculating the covariance of network outputs (for validation).
-        These are served ``n_per_device`` at at time as a numpy iterator from a
+        These are served ``n_per_device`` at a time as a numpy iterator from a
         TensorFlow dataset.
     validation_derivative : list of tf.data.Dataset().as_numpy_iterators()
         The simulations generated at parameter values perturbed from the
         fiducial used to calculate the numerical derivative of network outputs
         with respect to model parameters (for validation).  These are served
-        ``n_per_device`` at at time as a numpy iterator from a TensorFlow
+        ``n_per_device`` at a time as a numpy iterator from a TensorFlow
         dataset.
     fiducial_iterations : int
         The number of iterations over the fiducial dataset

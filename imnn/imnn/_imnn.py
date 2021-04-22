@@ -79,7 +79,8 @@ class _IMNN:
     :func:`~imnn.imnn._aggregated_imnn._AggregatedIMNN`.
 
     ``_IMNN`` is designed as the parent class for a range of specific case
-    IMNN:
+    IMNNs. There is a helper function (IMNN) which should return the correct
+    case when provided with the correct data. These different subclasses are:
 
     :func:`~imnn.SimulatorIMNN`:
 
@@ -121,13 +122,13 @@ class _IMNN:
         input sizes as batching cannot be done when calculating the Fisher
         information matrix
 
-    :func:`~imnn.NoiseNumericalGradientIMNN`:
+    :func:`~imnn.DatasetGradientIMNN`:
 
-        ``AggregatedNumericalGradientIMNN`` where realisations of additive
-        noise can be added to the simulations (and the simulations for the
-        numerical derivatives) on-the-fly. Note that the aggregation is not
-        done correctly at the moment and it needs to inherit from
-        ``_AggregatedIMNN`` rather than ``_IMNN``
+        ``AggregatedGradientIMNN`` with prebuilt TensorFlow datasets
+
+    :func:`~imnn.DatasetNumericalGradientIMNN`:
+
+        ``AggregatedNumericalGradientIMNN`` with prebuilt TensorFlow datasets
 
     There are currently two other parent classes
 
@@ -141,16 +142,6 @@ class _IMNN:
         to fit into memory. Note there is a significant performance loss from
         using the aggregation so it should only be used for these large data
         cases
-
-    :func:`~imnn.imnn._tensorflow_imnn.TensorFlowIMNN`:
-
-        This is the parent class for the TensorFlow implementation of the IMNN
-        which is more-or-less equivalent to AggregatedIMNN although cannot be
-        aggregated over several devices. It only has only one child at the
-        moment, ``TensorFlowNumericalGradientIMNN``, although
-        ``TensorFlowGradientIMNN`` should be added soon. Note that the
-        TensorFlow implementation will be moved to ``imnn-tf`` in the near
-        future.
 
     Parameters
     ----------
