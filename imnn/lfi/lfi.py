@@ -1,6 +1,5 @@
 import matplotlib.pyplot as plt
 import jax.numpy as np
-from imnn.utils import get_gridsize
 
 
 class LikelihoodFreeInference:
@@ -8,7 +7,7 @@ class LikelihoodFreeInference:
         self.verbose = verbose
         self.prior = prior
         self.n_params = len(self.prior.event_shape)
-        self.gridsize = get_gridsize(gridsize, self.n_params)
+        self.gridsize = self.get_gridsize(gridsize, self.n_params)
         self.ranges = [
             np.linspace(
                 self.prior.low[i],
@@ -17,6 +16,20 @@ class LikelihoodFreeInference:
             for i in range(self.n_params)]
         self.marginals = None
         self.n_targets = None
+
+    def get_gridsize(self, gridsize, size):
+        if type(gridsize) == int:
+            gridsize = [gridsize for i in range(size)]
+        elif type(gridsize) == list:
+            if len(gridsize) == size:
+                gridsize = gridsize
+            else:
+                raise ValueError(
+                    f"`gridsize` is a list of length {len(gridsize)} but " +
+                    f"`shape` determined by `input` is {size}")
+        else:
+            raise TypeError("`gridsize` is not a list or an integer")
+        return gridsize
 
     def get_levels(self, marginal, ranges, levels=[0.68, 0.95]):
         domain_volume = 1

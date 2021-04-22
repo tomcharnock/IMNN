@@ -6,7 +6,7 @@ import jax
 import jax.numpy as np
 from functools import partial
 from imnn.lfi import LikelihoodFreeInference
-from imnn.utils import container, get_gridsize
+from imnn.utils import container
 from scipy.ndimage import gaussian_filter
 
 
@@ -275,7 +275,7 @@ class ApproximateBayesianComputation(LikelihoodFreeInference):
             n_summaries = self.n_summaries
         else:
             n_summaries = points[0].shape[-1]
-        gridsize = get_gridsize(gridsize, n_summaries)
+        gridsize = self.get_gridsize(gridsize, n_summaries)
         targets, n_targets = self.target_choice(target)
         if ranges is None:
             ranges = [
