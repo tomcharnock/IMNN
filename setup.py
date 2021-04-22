@@ -23,6 +23,7 @@ setuptools.setup(
     python_requires=">=3.6",
     install_requires=[
         "jax>=0.2.10",
+        "jaxlib>=0.1.62",
         "tensorflow>=2.1.0",
         "tqdm>=4.48.2",
         "tensorflow_probability",
