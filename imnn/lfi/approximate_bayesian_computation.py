@@ -97,11 +97,12 @@ class ApproximateBayesianComputation(LikelihoodFreeInference):
     def set_accepted(self, ϵ, smoothing=None):
         def get_accepted(distances, ϵ):
             return np.less(distances, ϵ)
-        if type(ϵ) is float:
+        if not isinstance(ϵ, list):
             accepted = jax.vmap(
                 lambda distances: get_accepted(distances, ϵ))(
                 self.distances.all)
         else:
+            print(self.distances.all.shape)
             accepted = jax.vmap(get_accepted)(self.distances.all, ϵ)
         rejected = ~accepted
         accepted_inds = [np.argwhere(accept)[:, 0] for accept in accepted]
@@ -153,7 +154,7 @@ class ApproximateBayesianComputation(LikelihoodFreeInference):
             summary_samples = self.compressor(
                 self.simulator(key, parameter_samples))
             distance_samples = self.distance_measure(
-                self.target_summaries, summary_samples)
+                summary_samples, self.target_summaries).T
             indices = jax.lax.dynamic_slice(
                 np.arange(n_simulations * max_iterations),
                 [n_simulations * iteration],
@@ -161,7 +162,7 @@ class ApproximateBayesianComputation(LikelihoodFreeInference):
             parameters = jax.ops.index_update(
                 parameters,
                 jax.ops.index[indices],
-                np.stack(parameter_samples, -1))
+                parameter_samples)
             summaries = jax.ops.index_update(
                 summaries,
                 jax.ops.index[indices],

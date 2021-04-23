@@ -7,8 +7,8 @@ tfp = tensorflow_probability.substrates.jax
 tfd = tfp.distributions
 
 class PopulationMonteCarlo(ApproximateBayesianComputation):
-    def __init__(self, target_data, prior, simulator, compressor,
-                 gridsize=100, F=None, distance_measure=None, verbose=True):
+    def __init__(self, target_data, prior, simulator, compressor, F=None,
+                 gridsize=100, distance_measure=None, verbose=True):
         super().__init__(
             target_data=target_data,
             prior=prior,
@@ -21,6 +21,12 @@ class PopulationMonteCarlo(ApproximateBayesianComputation):
         self.acceptance_reached = np.zeros(self.n_targets)
         self.iterations = np.zeros(self.n_targets, dtype=np.int32)
         self.total_draws = np.zeros(self.n_targets, dtype=np.int32)
+        if self.F is None:
+            self.F = np.stack([np.eye(self.n_params)
+                for i in range(self.n_targets)], 0)
+            self.distance_measure = self.F_distance
+        if (self.F.shape == (self.n_params, self.n_params)):
+            self.F = np.stack([self.F for i in range(self.n_targets)], 0)
 
     def __call__(self, rng, n_initial_points, n_points,
                  percentile=75, acceptance_ratio=0.1, max_iteration=10,
@@ -112,7 +118,6 @@ class PopulationMonteCarlo(ApproximateBayesianComputation):
                         np.expand_dims(target, 0),
                         np.expand_dims(summaries, 0),
                         F))
-
                 # if n_parallel_simulations is not None:
                 #     min_distance_index = np.argmin(distances)
                 #     min_distance = distances[min_distance_index]

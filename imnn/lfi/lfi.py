@@ -3,7 +3,8 @@ import jax.numpy as np
 
 
 class LikelihoodFreeInference:
-    def __init__(self, prior, gridsize=100, verbose=True):
+    def __init__(self, prior, gridsize=100, n_targets=None, marginals=None,
+                 verbose=True):
         self.verbose = verbose
         self.prior = prior
         self.n_params = self.prior.event_shape[0]
@@ -14,8 +15,8 @@ class LikelihoodFreeInference:
                 self.prior.high[i],
                 self.gridsize[i])
             for i in range(self.n_params)]
-        self.marginals = None
-        self.n_targets = None
+        self.marginals = self.put_marginals(marginals)
+        self.n_targets = n_targets
 
     def get_gridsize(self, gridsize, size):
         if type(gridsize) == int:
@@ -209,6 +210,29 @@ class LikelihoodFreeInference:
                 bbox_to_anchor=bbox_to_anchor,
                 ncol=ncol)
         return ax
+
+    def put_marginals(self, marginals):
+        if marginals is None:
+            return None
+        _marginals = []
+        for row in range(self.n_params):
+            _marginals.append([])
+            for column in range(self.n_params):
+                if column == row:
+                    _marginals[row].append(
+                        marginals.sum(
+                            tuple(i + 1 for i in range(self.n_params)
+                                if i != row)))
+                    _marginals[row][-1] /= np.expand_dims(
+                        np.sum(_marginals[row][-1], 1)
+                            * (self.ranges[row][1] - self.ranges[row][0]),
+                        1)
+                elif column < row:
+                    _marginals[row].append(
+                        marginals.sum(
+                            tuple(i + 1 for i in range(self.n_params)
+                                if (i != row) and (i != column))))
+        return _marginals
 
     def target_choice(self, target):
         if target is None:
