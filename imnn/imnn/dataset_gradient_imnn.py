@@ -327,13 +327,15 @@ class DatasetGradientIMNN(AggregatedGradientIMNN):
                      partial(
                          generator,
                          "tmp",
-                         "fiducial"),
+                         "fiducial",
+                         n_d),
                      tf.float32),
                 tf.data.Dataset.from_generator(
                      partial(
                          generator,
                          "tmp",
-                         "derivative"),
+                         "derivative",
+                         n_d),
                      tf.float32))
                 ).take(n_d // n_devices
                 ).batch(n_per_device

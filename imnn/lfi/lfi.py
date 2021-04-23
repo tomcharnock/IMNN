@@ -6,7 +6,7 @@ class LikelihoodFreeInference:
     def __init__(self, prior, gridsize=100, verbose=True):
         self.verbose = verbose
         self.prior = prior
-        self.n_params = len(self.prior.event_shape)
+        self.n_params = self.prior.event_shape[0]
         self.gridsize = self.get_gridsize(gridsize, self.n_params)
         self.ranges = [
             np.linspace(

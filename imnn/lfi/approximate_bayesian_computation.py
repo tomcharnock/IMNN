@@ -44,17 +44,13 @@ class ApproximateBayesianComputation(LikelihoodFreeInference):
         if ((self.parameters.all is None)
                 and ((rng is None) or (n_samples is None))
                 and ((parameters is None) or (summaries is None))):
-            if self.verbose:
-                print("No samples currently available. If running ",
-                      "simulations `rng` must be a JAX prng and `n_samples` ",
-                      "an integer number of samples. If using premade ",
-                      "summaries `parameters` and `summaries` must be numpy ",
-                      "arrays.")
-            sys.exit()
+            raise ValueError(
+                "No samples currently available. If running simulations " +
+                "`rng` must be a JAX prng and `n_samples` an integer number " +
+                "of samples. If using premade summaries `parameters` and " +
+                "`summaries` must be numpy arrays.")
         if ((min_accepted is not None) and (ϵ is None)):
-            if self.verbose:
-                print("`ϵ` must be passed if passing `min_accepted`")
-            sys.exit()
+            raise ValueError("`ϵ` must be passed if passing `min_accepted`")
         if (rng is not None) and (n_samples is not None):
             if ((ϵ is not None) and (min_accepted is not None)):
                 self.set_samples(
@@ -82,16 +78,19 @@ class ApproximateBayesianComputation(LikelihoodFreeInference):
             self.summaries.all = summaries
             self.distances.all = distances
         else:
-            self.parameters.all = np.vstack([self.parameters.all, parameters])
-            self.summaries.all = np.vstack([self.summaries.all, summaries])
-            self.distances.all = np.hstack([self.distances.all, distances])
+            self.parameters.all = np.concatenate([self.parameters.all, parameters], axis=1)
+            self.summaries.all = np.concatenate([self.summaries.all, summaries], axis=1)
+            self.distances.all = np.concatenate([self.distances.all, distances], axis=1)
         self.parameters.size = self.parameters.all.shape[0]
         self.summaries.size = self.summaries.all.shape[0]
         self.distances.size = self.distances.all.shape[-1]
 
-    def get_samples(self, rng, n_samples):
+    def get_samples(self, rng, n_samples, dist=None):
         rng, key = jax.random.split(rng)
-        parameters = self.prior.sample(n_samples, seed=rng)
+        if dist is None:
+            parameters = self.prior.sample(n_samples, seed=rng)
+        else:
+            parameters = dist.sample(n_samples, seed=rng)
         summaries = self.compressor(self.simulator(key, parameters))
         return np.stack(parameters, -1), summaries
 
@@ -213,6 +212,12 @@ class ApproximateBayesianComputation(LikelihoodFreeInference):
                   f"({n_simulations * iteration} simulations done).")
         return parameters, summaries, distances
 
+    def set_marginals(self, accepted_parameters=None, ranges=None,
+                      gridsize=None, smoothing=None):
+        self.marginals = self.get_marginals(
+            accepted_parameters=accepted_parameters, ranges=ranges,
+            gridsize=gridsize, smoothing=smoothing)
+
     def get_marginals(self, accepted_parameters=None, ranges=None,
                       gridsize=None, smoothing=None):
         if accepted_parameters is None:
@@ -296,15 +301,17 @@ class ApproximateBayesianComputation(LikelihoodFreeInference):
             alpha=alpha, figsize=figsize, linestyle=linestyle, target=target,
             format=format, ncol=ncol, bbox_to_anchor=bbox_to_anchor)
 
-    def F_distance(self, x, y):
+    def F_distance(self, x, y, F=None):
+        if F is None:
+            F = self.F
         difference = np.expand_dims(x, 1) - np.expand_dims(y, 0)
         return np.sqrt(
             np.einsum(
-                "ijk,kl,ijl->ij",
+                "ijk,kl,ijl->i",
                 difference,
-                self.F,
+                F,
                 difference))
 
-    def euclidean_distance(self, x, y):
+    def euclidean_distance(self, x, y, aux=None):
         difference = np.expand_dims(x, 1) - np.expand_dims(y, 0)
         return np.sqrt(np.sum(np.square(difference), -1))
