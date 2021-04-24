@@ -6,6 +6,7 @@ from functools import partial
 tfp = tensorflow_probability.substrates.jax
 tfd = tfp.distributions
 
+
 class PopulationMonteCarlo(ApproximateBayesianComputation):
     def __init__(self, target_data, prior, simulator, compressor, F=None,
                  gridsize=100, distance_measure=None, verbose=True):
@@ -22,8 +23,8 @@ class PopulationMonteCarlo(ApproximateBayesianComputation):
         self.iterations = np.zeros(self.n_targets, dtype=np.int32)
         self.total_draws = np.zeros(self.n_targets, dtype=np.int32)
         if self.F is None:
-            self.F = np.stack([np.eye(self.n_params)
-                for i in range(self.n_targets)], 0)
+            self.F = np.stack(
+                [np.eye(self.n_params) for i in range(self.n_targets)], 0)
             self.distance_measure = self.F_distance
         if (self.F.shape == (self.n_params, self.n_params)):
             self.F = np.stack([self.F for i in range(self.n_targets)], 0)
@@ -60,10 +61,8 @@ class PopulationMonteCarlo(ApproximateBayesianComputation):
 
         if percentile is None:
             ϵ_ind = -1
-            to_accept = 1
         else:
             ϵ_ind = int(percentile / 100 * n_points)
-            to_accept = n_points - ϵ_ind
 
         key = jax.random.split(rng, num=self.n_targets)
         (rng, samples, summaries, distances, weighting, acceptance_reached,
@@ -79,7 +78,7 @@ class PopulationMonteCarlo(ApproximateBayesianComputation):
             key, samples, summaries, distances, weighting,
             self.target_summaries, self.F)
         self.set_samples(samples, summaries, distances=distances,
-                        replace=replace)
+                         replace=replace)
         self.set_accepted(smoothing=smoothing)
         self.acceptance_reached = self.acceptance_reached + acceptance_reached
         self.iterations = self.iterations + iteration_counter
@@ -143,31 +142,34 @@ class PopulationMonteCarlo(ApproximateBayesianComputation):
                 #     accepted = closer.sum()
                 # else:
                 closer = np.less(distances, dis)
-                loc = jax.lax.cond(closer,
-                    lambda _ : proposed,
-                    lambda _ : loc,
+                loc = jax.lax.cond(
+                    closer,
+                    lambda _: proposed,
+                    lambda _: loc,
                     None)
-                summ = jax.lax.cond(closer,
-                    lambda _ : summaries,
-                    lambda _ : summ,
+                summ = jax.lax.cond(
+                    closer,
+                    lambda _: summaries,
+                    lambda _: summ,
                     None)
-                dis = jax.lax.cond(closer,
-                    lambda _ : distances,
-                    lambda _ : dis,
+                dis = jax.lax.cond(
+                    closer,
+                    lambda _: distances,
+                    lambda _: dis,
                     None)
                 iteration_draws = 1 - np.isinf(distances).sum()
                 draws += iteration_draws
                 accepted = closer.sum()
                 return (rng, loc, summ, dis, draws, accepted,
-                        acceptance_counter+1)
+                        acceptance_counter + 1)
 
             (rng, samples, summaries, distances, weighting, acceptance_reached,
              iteration_counter, total_draws) = args
-            ϵ = distances[ϵ_ind]
             loc = samples[ϵ_ind:]
             cov = self.w_cov(samples, weighting)
             inv_cov = np.linalg.inv(cov)
-            scale = np.linalg.cholesky(cov)
+            scale = np.linalg.cholesky(inv_cov)
+            # scale = np.linalg.cholesky(cov)
             rng, *key = jax.random.split(rng, num=loc.shape[0] + 1)
             draws = np.zeros(loc.shape[0], dtype=np.int32)
             accepted = np.zeros(loc.shape[0], dtype=np.int32)
@@ -175,7 +177,7 @@ class PopulationMonteCarlo(ApproximateBayesianComputation):
 
             results = jax.vmap(
                 lambda key, loc, summaries, distances, draws, accepted,
-                    acceptance_counter : jax.lax.while_loop(
+                acceptance_counter: jax.lax.while_loop(
                     single_acceptance_condition,
                     single_acceptance,
                     (key, loc, summaries, distances, draws, accepted,
@@ -184,7 +186,7 @@ class PopulationMonteCarlo(ApproximateBayesianComputation):
                 draws, accepted, acceptance_counter)
 
             weighting = jax.vmap(
-                lambda proposed : (
+                lambda proposed: (
                     self.prior.prob(proposed)
                     / (np.sum(weighting * tfd.MultivariateNormalTriL(
                         loc=samples,
@@ -192,7 +194,7 @@ class PopulationMonteCarlo(ApproximateBayesianComputation):
                             scale[np.newaxis],
                             samples.shape[0],
                             axis=0)).prob(proposed)))))(
-                    np.vstack([samples[:ϵ_ind], results[1]]))
+                np.vstack([samples[:ϵ_ind], results[1]]))
             samples = jax.ops.index_update(
                 samples,
                 jax.ops.index[ϵ_ind:, :],
@@ -207,8 +209,8 @@ class PopulationMonteCarlo(ApproximateBayesianComputation):
                 results[3])
             acceptance_reached = results[-2].sum() / results[-3].sum()
             return (rng, samples, summaries, distances, weighting,
-                acceptance_reached, iteration_counter + 1,
-                total_draws + results[-3].sum())
+                    acceptance_reached, iteration_counter + 1,
+                    total_draws + results[-3].sum())
 
         acceptance_reached = np.inf
         iteration_counter = 0
@@ -221,16 +223,16 @@ class PopulationMonteCarlo(ApproximateBayesianComputation):
 
     def set_accepted(self, smoothing=None):
         self.parameters.accepted = [params for params in self.parameters.all]
-        self.parameters.n_accepted = [params.shape[0]
-            for params in self.parameters.all]
-        self.summaries.accepted = [summaries
-            for summaries in self.summaries.all]
-        self.summaries.n_accepted = [summaries.shape[0]
-            for summaries in self.summaries.all]
-        self.distances.accepted = [distances
-            for distances in self.distances.all]
-        self.distances.n_accepted = [distances.shape[0]
-            for distances in self.distances.all]
+        self.parameters.n_accepted = [
+            params.shape[0] for params in self.parameters.all]
+        self.summaries.accepted = [
+            summaries for summaries in self.summaries.all]
+        self.summaries.n_accepted = [
+            summaries.shape[0] for summaries in self.summaries.all]
+        self.distances.accepted = [
+            distances for distances in self.distances.all]
+        self.distances.n_accepted = [
+            distances.shape[0] for distances in self.distances.all]
         self.parameters.rejected = None
         self.summaries.rejected = None
         self.distances.rejected = None
@@ -240,6 +242,7 @@ class PopulationMonteCarlo(ApproximateBayesianComputation):
         weighted_samples = proposed * weighting[:, np.newaxis]
         return weighted_samples.T.dot(
             weighted_samples) / weighting.T.dot(weighting)
+
 
 class tmvn():
     def __init__(self, loc, scale, low, high, max_counter=int(1e3)):
@@ -269,7 +272,7 @@ class tmvn():
     def __sample(self, args):
         rng, loc, counter = args
         rng, key = jax.random.split(rng)
-        return (rng, self.mvn(key, loc), counter+1)
+        return (rng, self.mvn(key, loc), counter + 1)
 
     def _sample(self, rng, loc):
         rng, key = jax.random.split(rng)
@@ -279,8 +282,8 @@ class tmvn():
             (rng, self.mvn(key, loc), 0))
         return jax.lax.cond(
             np.greater_equal(counter, self.max_counter),
-            lambda _ : np.nan * np.ones((self.n_params,)),
-            lambda _ : loc,
+            lambda _: np.nan * np.ones((self.n_params,)),
+            lambda _: loc,
             None)
 
     def _sample_n(self, rng, loc, n=None):
@@ -288,24 +291,24 @@ class tmvn():
             return self._sample(rng, loc)
         else:
             key = jax.random.split(rng, num=n)
-            return jax.vmap(self._sample)(key,
-                np.repeat(loc[np.newaxis], n, axis=0))
+            return jax.vmap(self._sample)(
+                key, np.repeat(loc[np.newaxis], n, axis=0))
 
     def sample(self, shape=None, seed=None):
         if shape is None:
             if self.n_samples is None:
                 return self._sample_n(seed, self.loc)
             else:
-                key = jax.random.split(seed, num_self.n_samples)
+                key = jax.random.split(seed, num=self.n_samples)
                 return jax.vmap(
-                    lambda key, loc : self._sample_n(key, loc))(key, self.loc)
+                    lambda key, loc: self._sample_n(key, loc))(key, self.loc)
         elif len(shape) == 1:
             if self.n_samples is None:
                 return self._sample_n(seed, self.loc, n=shape[0])
             else:
-                key = jax.random.split(seed, num_self.n_samples)
+                key = jax.random.split(seed, num=self.n_samples)
                 return jax.vmap(
-                    lambda key, loc : self._sample_n(key, loc, n=shape[0]))(
+                    lambda key, loc: self._sample_n(key, loc, n=shape[0]))(
                     key, self.loc)
         else:
             key = jax.random.split(seed, num=shape[-1])

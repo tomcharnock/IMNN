@@ -132,10 +132,10 @@ class LikelihoodFreeInference:
                             color=colours[i],
                             alpha=alpha,
                             label=label + f" Target {target+1}")
-                        h, l = ax[row, column].get_legend_handles_labels()
+                        h, lab = ax[row, column].get_legend_handles_labels()
         if label != "":
-            ax[0, 0].legend(h, l, frameon=False, bbox_to_anchor=bbox_to_anchor,
-                            ncol=ncol)
+            ax[0, 0].legend(h, lab, frameon=False,
+                            bbox_to_anchor=bbox_to_anchor, ncol=ncol)
         return ax
 
     def scatter_plot(self, ax=None, ranges=None, points=None, label=None,
@@ -222,16 +222,16 @@ class LikelihoodFreeInference:
                     _marginals[row].append(
                         marginals.sum(
                             tuple(i + 1 for i in range(self.n_params)
-                                if i != row)))
+                                  if i != row)))
                     _marginals[row][-1] /= np.expand_dims(
                         np.sum(_marginals[row][-1], 1)
-                            * (self.ranges[row][1] - self.ranges[row][0]),
+                        * (self.ranges[row][1] - self.ranges[row][0]),
                         1)
                 elif column < row:
                     _marginals[row].append(
                         marginals.sum(
                             tuple(i + 1 for i in range(self.n_params)
-                                if (i != row) and (i != column))))
+                                  if (i != row) and (i != column))))
         return _marginals
 
     def target_choice(self, target):

@@ -1,7 +1,6 @@
 # TODO
 # Add kde as an alternative to the histogram
 
-import sys
 import jax
 import jax.numpy as np
 from functools import partial
@@ -78,9 +77,12 @@ class ApproximateBayesianComputation(LikelihoodFreeInference):
             self.summaries.all = summaries
             self.distances.all = distances
         else:
-            self.parameters.all = np.concatenate([self.parameters.all, parameters], axis=1)
-            self.summaries.all = np.concatenate([self.summaries.all, summaries], axis=1)
-            self.distances.all = np.concatenate([self.distances.all, distances], axis=1)
+            self.parameters.all = np.concatenate(
+                [self.parameters.all, parameters], axis=1)
+            self.summaries.all = np.concatenate(
+                [self.summaries.all, summaries], axis=1)
+            self.distances.all = np.concatenate(
+                [self.distances.all, distances], axis=1)
         self.parameters.size = self.parameters.all.shape[0]
         self.summaries.size = self.summaries.all.shape[0]
         self.distances.size = self.distances.all.shape[-1]
