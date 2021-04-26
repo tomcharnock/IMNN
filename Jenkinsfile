@@ -6,7 +6,7 @@ pipeline {
         sh '''python3 -m venv py_imnn
 source py_imnn/bin/activate
 pip install --upgrade pip
-pip install pytest flake8
+pip install pytest flake8 sphinx
 pip install -e .'''
       }
     }
