@@ -101,7 +101,7 @@ cd docs
 rm -rf _build
 make html
 tar -C _build/html -zcvf doc.tgz .
-curl -v -F filename=doc -F file=@doc.tgz http://athos.iap.fr:9595/deploy-doc/imnn
+curl -v -F filename=doc -F file=@doc.tgz http://athos.iap.fr:9595/deploy-doc/imnn'''
       }
     }
   }
