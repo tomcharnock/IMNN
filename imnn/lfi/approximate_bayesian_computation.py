@@ -43,7 +43,7 @@ class ApproximateBayesianComputation(LikelihoodFreeInference):
         Either ``F_distance`` or ``euclidean_distance`` depending on inputs
     """
     def __init__(self, target_data, prior, simulator, compressor,
-                 gridsize=100, F=None, distance_measure=None, verbose=True):
+                 gridsize=100, F=None, distance_measure=None):
         """Constructor method
 
         Parameters
@@ -61,11 +61,13 @@ class ApproximateBayesianComputation(LikelihoodFreeInference):
             A function which takes a batch of simulations and returns their
             compressed summaries for each simulation (can be identity function
             for no compression)
+        gridsize : int or list, default=100
+            The number of grid points to evaluate the marginal distribution on
+            for every parameter (int) or each parameter (list)
         """
         super().__init__(
             prior=prior,
-            gridsize=gridsize,
-            verbose=verbose)
+            gridsize=gridsize)
         self.simulator = simulator
         self.compressor = compressor
         if len(target_data.shape) == 1:
@@ -248,7 +250,7 @@ class ApproximateBayesianComputation(LikelihoodFreeInference):
         return jax.lax.while_loop(loop_cond, loop_body, inputs)
 
     def get_min_accepted(self, rng, ϵ, accepted, n_simulations=1,
-                         max_iterations=1, smoothing=None):
+                         max_iterations=1, smoothing=None, verbose=True):
         parameters = np.ones((max_iterations * n_simulations, self.n_params))
         summaries = np.ones(
             (max_iterations * n_simulations,
@@ -275,7 +277,7 @@ class ApproximateBayesianComputation(LikelihoodFreeInference):
         parameters = parameters[keep]
         summaries = summaries[keep]
         distances = distances[:, keep]
-        if self.verbose:
+        if verbose:
             print(f"{n_accepted - current_accepted} accepted in last ",
                   f"{iteration} iterations ",
                   f"({n_simulations * iteration} simulations done).")
@@ -333,7 +335,7 @@ class ApproximateBayesianComputation(LikelihoodFreeInference):
             ranges = self.ranges
         if points is None:
             points = self.parameters.accepted
-        return self.scatter_plot_(
+        return self._scatter_plot(
             ax=ax, ranges=ranges, points=points, label=label,
             axis_labels=axis_labels, colours=colours, hist=hist, s=s,
             alpha=alpha, figsize=figsize, linestyle=linestyle, target=target,
@@ -364,7 +366,7 @@ class ApproximateBayesianComputation(LikelihoodFreeInference):
                             for target in targets])),
                     gridsize[summary])
                 for summary in range(n_summaries)]
-        return self.scatter_plot_(
+        return self._scatter_plot(
             ax=ax, ranges=ranges, points=points, label=label,
             axis_labels=axis_labels, colours=colours, hist=hist, s=s,
             alpha=alpha, figsize=figsize, linestyle=linestyle, target=target,

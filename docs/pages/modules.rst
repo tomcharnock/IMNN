@@ -1,6 +1,10 @@
 Specific IMNN classes
 =====================
 
+.. contents:: The available modules are:
+   :depth: 2
+   :local:
+
 SimulatorIMNN
 -------------
 

@@ -13,6 +13,7 @@ The information maximising neural network (IMNN) is a fitting algorithm for neur
    pages/modules
    pages/parents
    pages/tf.data.Datasets
+   pages/lfi
 
 
 Indices and tables
