@@ -94,7 +94,6 @@ python -m pytest --junitxml=junitxml imnn/imnn/imnn_test.py'''
       }
     }
   stage("Documentation") {
-    agent { label "linux" }
     steps {
     sh '''source py_imnn/bin/activate
 cd docs
