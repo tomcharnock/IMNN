@@ -7,11 +7,61 @@ from functools import partial
 from imnn.lfi import LikelihoodFreeInference
 from imnn.utils import container
 from scipy.ndimage import gaussian_filter
+from imnn.utils.utils import _check_input
 
 
 class ApproximateBayesianComputation(LikelihoodFreeInference):
+    """Automatic Bayesian computation
+
+    Parameters
+    ----------
+    target_summaries : float(n_targets, n_summaries)
+        The compressed data to be infered
+    n_summaries : int
+        The size of the output of the compressor for a single simulation
+    n_targets : int
+        The number of different targets to be infered
+    invF : float(n_params, n_params)
+        The inverse Fisher information matrix for rescaling distance measure
+    parameters : utils container
+        Holds accepted and rejected parameters and some summaries of results
+    summaries : utils container
+        Holds accepted and rejected summaries and some summaries of results
+    distances : utils container
+        Holds accepted and rejected distances of summaries to targets and
+        some summaries of results
+
+    Methods
+    -------
+    simulator
+        A simulator which takes in an array of parameters and returns
+        simulations made at those parameter values
+    compressor
+        A function which takes in an array of simulations and compresses them.
+        If no compression is needed this can be an identity function
+    distance_measure:
+        Either ``F_distance`` or ``euclidean_distance`` depending on inputs
+    """
     def __init__(self, target_data, prior, simulator, compressor,
                  gridsize=100, F=None, distance_measure=None, verbose=True):
+        """Constructor method
+
+        Parameters
+        ----------
+        target_data: float(n_targets, input_data)
+            Data (or batch of data) to infer parameter values at
+        prior: fn
+            A prior distribution which can be evaluated and sampled from
+            (should also contain a ``low`` and a ``high`` attribute with
+            appropriate ranges)
+        simulator: fn
+            A function which takes in a batch of parameter values (and random
+            seeds) and returns a simulation made at each parameter value
+        compressor: fn
+            A function which takes a batch of simulations and returns their
+            compressed summaries for each simulation (can be identity function
+            for no compression)
+        """
         super().__init__(
             prior=prior,
             gridsize=gridsize,
@@ -23,9 +73,25 @@ class ApproximateBayesianComputation(LikelihoodFreeInference):
         self.target_summaries = self.compressor(target_data)
         self.n_summaries = self.target_summaries.shape[-1]
         self.n_targets = self.target_summaries.shape[0]
-        self.F = F
+        if F is not None:
+            if isinstance(F, list):
+                self.invF = [
+                    np.linalg.inv(
+                        _check_input(f, (self.n_params, self.n_params), "F"))
+                    for f in F]
+            else:
+                if F.shape == (self.n_params, self.n_params):
+                    self.invF = np.expand_dims(np.linalg.inv(F), 0)
+                    if self.n_targets > 1:
+                        self.invF = np.repeat(self.invF, self.n_targets)
+                else:
+                    self.invF = jax.vmap(np.linalg.inv)(
+                        _check_input(
+                            F,
+                            (self.n_targets, self.n_params, self.n_params),
+                            "F"))
         if distance_measure is None:
-            if self.F is not None:
+            if self.invF is not None:
                 self.distance_measure = self.F_distance
             else:
                 self.distance_measure = self.euclidean_distance

@@ -1,13 +1,50 @@
 import matplotlib.pyplot as plt
 import jax.numpy as np
+from imnn.utils.utils import _check_boolean
 
 
 class LikelihoodFreeInference:
-    def __init__(self, prior, gridsize=100, n_targets=None, marginals=None,
+    """Base class (some functionality) for likelihood free inference methods
+
+    Parameters
+    ----------
+    verbose : bool
+        Whether to print values or not (may no longer really be used)
+    gridsize : list
+        The number of grid points to evaluate the marginal distribution on for
+        each parameter
+    ranges : list
+        A list of arrays containing the gridpoints for the marginal
+        distribution for each parameter
+    marginal : list of lists
+        A list of rows and columns of marginal distributions of a corner plot
+
+    Methods
+    -------
+    prior
+        A prior distribution which can be evaluated and sampled from (should
+        also contain a ``low`` and a ``high`` attribute with appropriate
+        ranges)
+    """
+    def __init__(self, prior, gridsize=100, marginals=None,
                  verbose=True):
-        self.verbose = verbose
+        self.verbose = _check_boolean(verbose, "verbose")
         self.prior = prior
-        self.n_params = self.prior.event_shape[0]
+        try:
+            self.n_params = self.prior.event_shape[0]
+        except Exception:
+            raise ValueError(
+                "`prior` has no event_shape - this should be `n_params`")
+        if not hasattr(self.prior, "low"):
+            raise ValueError(
+                "`prior` must have (or be given by assignment) a `low` " +
+                "attribute describing the minimum allowed value for each " +
+                "parameter value")
+        if not hasattr(self.prior, "low"):
+            raise ValueError(
+                "`prior` must have (or be given by assignment) a `low` " +
+                "attribute describing the minimum allowed value for each " +
+                "parameter value")
         self.gridsize = self.get_gridsize(gridsize, self.n_params)
         self.ranges = [
             np.linspace(
@@ -16,12 +53,11 @@ class LikelihoodFreeInference:
                 self.gridsize[i])
             for i in range(self.n_params)]
         self.marginals = self.put_marginals(marginals)
-        self.n_targets = n_targets
 
     def get_gridsize(self, gridsize, size):
-        if type(gridsize) == int:
+        if isinstance(gridsize, int):
             gridsize = [gridsize for i in range(size)]
-        elif type(gridsize) == list:
+        elif isinstance(gridsize, list):
             if len(gridsize) == size:
                 gridsize = gridsize
             else:
