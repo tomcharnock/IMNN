@@ -43,7 +43,8 @@ class DatasetNumericalGradientIMNN(AggregatedNumericalGradientIMNN):
     :math:`\\partial{{\\bf x}^i}/\\partial\\theta_\\alpha` the covariance
 
     .. math::
-        C_{ab} = \\frac{1}{n_s-1}\sum_{i=1}^{n_s}(x^i_a-\mu^i_a)(x^i_b-\mu^i_b)
+        C_{ab} = \\frac{1}{n_s-1}\\sum_{i=1}^{n_s}(x^i_a-\\mu^i_a)
+        (x^i_b-\\mu^i_b)
 
     and the derivative of the mean of the network outputs with respect to the
     model parameters

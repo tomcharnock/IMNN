@@ -43,10 +43,11 @@ class _AggregatedIMNN:
 
     .. math::
         \\frac{\\partial\\Lambda}{\\partial{w_{ab}^l}} = \\frac{\\partial
-        \\Lambda}{\partial{x_i^j}}\\frac{\\partial{x_i^j}}{\\partial{w_{ab}^l}}
-        + \\frac{\\partial\\Lambda}{\partial\\partial{x_i^j}/\\partial
-        \\theta_\\alpha}\\frac{\\partial\\partial{x_i^j}/\\partial
-        \\theta_\\alpha}{\\partial{w_{ab}^l}}
+        \\Lambda}{\\partial{x_i^j}}\\frac{\\partial{x_i^j}}
+        {\\partial{w_{ab}^l}} + \\frac{\\partial\\Lambda}
+        {\\partial\\partial{x_i^j}/\\partial\\theta_\\alpha}
+        \\frac{\\partial\\partial{x_i^j}/\\partial\\theta_\\alpha}
+        {\\partial{w_{ab}^l}}
 
     Note that we keep the memory use low because only ``n_per_device``
     simulations are handled at once before being summed into a single gradient

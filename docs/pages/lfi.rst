@@ -10,9 +10,9 @@ different approximate Bayesian computation algorithms. These also come with a
 plotting function. Examples are available
 `here <examples/lfi/mean_and_variance/mean_and_variance.html>`_. Note that
 the module is not fully tested, but seems to be functionally working. There are
-more available with ``pip install imnn-tf`` where a previous more general
-versions of the same functions and checkout also
-`github.com/justinalsing/pydelfi
+more functions available with ``pip install imnn-tf`` where there is a previous
+implementation with more general versions of the same functions and checkout
+also `github.com/justinalsing/pydelfi
 <https://github.com/justinalsing/pydelfi/tree/tf2-tom>`_
 
 .. contents:: The available modules are:

@@ -206,10 +206,11 @@ class LikelihoodFreeInference:
                         ax[row, column].set_xticks([])
         return ax
 
-    def scatter_plot(self, ax=None, ranges=None, points=None, label=None,
-                     axis_labels=None, colours=None, hist=True, s=5., alpha=1.,
-                     figsize=(10, 10), linestyle="solid", target=None,
-                     format=False, ncol=2, bbox_to_anchor=(0.0, 1.0)):
+    def _scatter_plot(self, ax=None, ranges=None, points=None, label=None,
+                      axis_labels=None, colours=None, hist=True, s=5.,
+                      alpha=1., figsize=(10, 10), linestyle="solid",
+                      target=None, format=False, ncol=2,
+                      bbox_to_anchor=(0.0, 1.0)):
         """Plotter for scatter plots
 
         Plots scatter plots for points (parameters or summaries) in 2D subplots

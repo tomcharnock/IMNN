@@ -14,7 +14,7 @@ pip install -e .'''
     stage('Flake') {
       steps {
         sh '''source py_imnn/bin/activate
-flake8 . --extend-exclude=dist,build,docs,examples,IMNN.egg-info,__pycache__,py_imnn,imnn/utils/jac.py,.ipynb_checkpoints --ignore=E741,W503,W504,F403,F405,W605 --show-source --statistics'''
+flake8 . --extend-exclude=dist,build,docs,examples,IMNN.egg-info,__pycache__,py_imnn,imnn/utils/jac.py,.ipynb_checkpoints --show-source --statistics'''
       }
     }
 
