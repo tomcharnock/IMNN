@@ -346,8 +346,6 @@ def IMNN(n_s, n_d, n_params, n_summaries, input_shape, θ_fid, model, optimiser,
                         if verbose:
                             print("`main` and `required` provided, using " +
                                   "`DatasetGradientIMNN`")
-                        for key in parameters.keys():
-                            print(f"{key} = {type(parameters[key])}")
                         return DatasetGradientIMNN(**parameters)
             else:
                 raise ValueError(
@@ -509,14 +507,10 @@ def IMNN(n_s, n_d, n_params, n_summaries, input_shape, θ_fid, model, optimiser,
         if aggregate:
             if verbose:
                 print("`simulator` provided, using AggregatedSimulatorIMNN")
-            for key in parameters.keys():
-                print(f"{key} = {type(parameters[key])}")
             return AggregatedSimulatorIMNN(**parameters)
         else:
             if verbose:
                 print("`simulator` provided, using SimulatorIMNN")
-            for key in parameters.keys():
-                print(f"{key} = {type(parameters[key])}")
             return SimulatorIMNN(**parameters)
 
     if cache is not None:
@@ -558,14 +552,10 @@ def IMNN(n_s, n_d, n_params, n_summaries, input_shape, θ_fid, model, optimiser,
         if aggregate:
             if verbose:
                 print("using AggregatedGradientIMNN")
-            for key in parameters.keys():
-                print(f"{key} = {type(parameters[key])}")
             return AggregatedGradientIMNN(**parameters)
         else:
             if verbose:
                 print("using GradientIMNN")
-            for key in parameters.keys():
-                print(f"{key} = {type(parameters[key])}")
             return GradientIMNN(**parameters)
     else:
         parameters["δθ"] = δθ
@@ -589,8 +579,6 @@ def IMNN(n_s, n_d, n_params, n_summaries, input_shape, θ_fid, model, optimiser,
                     "if desired")
             if verbose:
                 print("using DatasetNumericalGradientIMNN")
-            for key in parameters.keys():
-                print(f"{key} = {type(parameters[key])}")
             return DatasetNumericalGradientIMNN(**parameters)
         else:
             try:
@@ -633,14 +621,10 @@ def IMNN(n_s, n_d, n_params, n_summaries, input_shape, θ_fid, model, optimiser,
             if aggregate:
                 if verbose:
                     print("using AggregatedNumericalGradientIMNN")
-                for key in parameters.keys():
-                    print(f"{key} = {type(parameters[key])}")
                 return AggregatedNumericalGradientIMNN(**parameters)
             else:
                 if verbose:
                     print("using NumericalGradientIMNN")
-                for key in parameters.keys():
-                    print(f"{key} = {type(parameters[key])}")
                 return NumericalGradientIMNN(**parameters)
 
     print(

@@ -329,10 +329,10 @@ class LikelihoodFreeInference:
                             bbox_to_anchor=bbox_to_anchor, ncol=ncol)
         return ax
 
-    def marginal_plot(self, ax=None, ranges=None, marginals=None, label=None,
-                      axis_labels=None, levels=None, linestyle="solid",
-                      colours=None, target=None, format=False, ncol=2,
-                      bbox_to_anchor=(1.0, 1.0)):
+    def marginal_plot(self, ax=None, ranges=None, marginals=None, known=None,
+                      label=None, axis_labels=None, levels=None,
+                      linestyle="solid", colours=None, target=None,
+                      format=False, ncol=2, bbox_to_anchor=(1.0, 1.0)):
         """Plots the marginal distribution corner plots
 
         Plots the 68% and 95% (approximate) confidence contours for each 2D
@@ -351,6 +351,8 @@ class LikelihoodFreeInference:
             The marginal distributions for every parameter and every 2D
             combination. If None the marginals defined in the class are used
             (if they exist)
+        known : float(n_params,)
+            Values to plot known parameter value lines at
         label : str or None, default=None
             Name to be used in the legend
         axis_labels : list of str or None, default=None
@@ -420,12 +422,22 @@ class LikelihoodFreeInference:
                                 color=colours[i],
                                 linestyle=linestyle,
                                 label=label)
+                            if known is not None:
+                                ax[row, column].axvline(
+                                    known[column],
+                                    color="black",
+                                    linestyle="dashed")
                         else:
                             ax[row, column].plot(
                                 marginals[row][column][target],
                                 ranges[row],
                                 color=colours[i],
                                 linestyle=linestyle)
+                            if known is not None:
+                                ax[row, column].axhline(
+                                    known[column],
+                                    color="black",
+                                    linestyle="dashed")
                     elif column < row:
                         ax[row, column].contour(
                             ranges[column],
@@ -437,6 +449,15 @@ class LikelihoodFreeInference:
                                 marginals[row][column][target],
                                 [ranges[column], ranges[row]],
                                 levels=levels))
+                        if known is not None:
+                            ax[row, column].axvline(
+                                known[column],
+                                color="black",
+                                linestyle="dashed")
+                            ax[row, column].axhline(
+                                known[row],
+                                color="black",
+                                linestyle="dashed")
         if label != "":
             ax[0, 0].legend(
                 frameon=False,
@@ -485,6 +506,7 @@ class LikelihoodFreeInference:
                         marginals.sum(
                             tuple(i + 1 for i in range(self.n_params)
                                   if (i != row) and (i != column))))
+        self.marginals = _marginals
         return _marginals
 
     def target_choice(self, target):

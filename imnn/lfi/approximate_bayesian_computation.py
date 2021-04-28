@@ -461,9 +461,9 @@ class ApproximateBayesianComputation(LikelihoodFreeInference):
                 distances,
                 jax.ops.index[:, indices],
                 distance_samples)
-            n_accepted = np.less(distances, ϵ).sum(1)
+            n_accepted = np.int32(np.less(distances, ϵ).sum(1))
             return rng, parameters, summaries, distances, n_accepted, \
-                iteration + 1
+                iteration + np.int32(1)
 
         parameters = np.ones((max_iterations * n_simulations, self.n_params))
         summaries = np.ones(
@@ -478,7 +478,7 @@ class ApproximateBayesianComputation(LikelihoodFreeInference):
             distances = np.hstack([distances, self.distances.all])
             if self.parameters.n_accepted is None:
                 self.set_accepted(ϵ, smoothing=smoothing)
-            n_accepted = self.parameters.n_accepted
+            n_accepted = np.int32(self.parameters.n_accepted)
         else:
             n_accepted = np.zeros(self.n_targets, dtype=np.int32)
         current_accepted = n_accepted
