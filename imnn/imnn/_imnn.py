@@ -1422,6 +1422,8 @@ class _IMNN:
         derivatives = self._construct_derivatives(derivatives)
         μ = np.mean(summaries, axis=0)
         C = np.cov(summaries, rowvar=False)
+        if self.n_summaries == 1:
+            C = np.array([[C]])
         invC = np.linalg.inv(C)
         dμ_dθ = np.mean(derivatives, axis=0)
         F = np.einsum("ij,ik,kl->jl", dμ_dθ, invC, dμ_dθ)

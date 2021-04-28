@@ -10,6 +10,8 @@ tfd = tfp.distributions
 class PopulationMonteCarlo(ApproximateBayesianComputation):
     """ Population driven approximate Bayesian computation sample retrieval
 
+    SEEMS TO BE A BUG IN THIS MODULE CURRENTLY!
+
     Approximate Bayesian computation tends to be very expensive because it
     depends on drawing samples from all over the prior and a lot of the domain
     may be extremely unlikely without good knowledge of the sampling
@@ -363,13 +365,57 @@ class PopulationMonteCarlo(ApproximateBayesianComputation):
             -------
             tuple
                 Same as input loop variables
+
+            Methods
+            -------
+            single_acceptance_condition:
+                checks if proposal has been accepted or max iterations reached
+            single_acceptance:
+                draws a proposal, simulates and compresses and checks distances
             """
             def single_acceptance_condition(args):
+                """checks proposal has been accepted or max iterations reached
+
+                Parameters
+                ----------
+                args : tuple
+                    see loop variable in `single_iteration`
+
+                Returns
+                -------
+                bool:
+                    True if proposal not accepted and number of attempts to get
+                    an accepted proposal not yet reached
+                """
                 return np.logical_and(
                     np.less(args[-2], 1),
                     np.less(args[-1], max_acceptance))
 
             def single_acceptance(args):
+                """Draws a proposal, simulates and compresses, checks distance
+
+                A new proposal is drawn from a truncated multivariate normal
+                distribution whose mean is centred on the parameter to move and
+                the covariance is set by the population. From this proposed
+                parameter value a simulation is made and compressed and the
+                distance from the target is calculated. If this distance is
+                less than the current position then the proposal is accepted.
+
+                Parameters
+                ----------
+                args : tuple
+                    see loop variable in `single_iteration`
+
+                Returns
+                -------
+                bool:
+                    True if proposal not accepted and number of attempts to get
+                    an accepted proposal not yet reached
+
+                Todo
+                ----
+                Parallel sampling is currently commented out
+                """
                 (rng, loc, scale, summ, dis, draws, accepted,
                  acceptance_counter) = args
                 rng, key = jax.random.split(rng)
@@ -425,11 +471,6 @@ class PopulationMonteCarlo(ApproximateBayesianComputation):
                 iteration_draws = 1 - np.isinf(distances).sum()
                 draws += iteration_draws
                 accepted = closer.sum()
-                # jax.lax.cond(
-                # np.equal(acceptance_counter + 1, max_acceptance),
-                # lambda _: 1,
-                # lambda _: closer.sum(),
-                # None)
                 return (rng, loc, scale, summ, dis, draws, accepted,
                         acceptance_counter + 1)
 
@@ -512,12 +553,12 @@ class PopulationMonteCarlo(ApproximateBayesianComputation):
 
         Parameters
         ----------
-        parameters : float(any, n_params)
+        parameters : float(n_targets, n_points, n_params)
             The pre-obtained parameter values to set to the class
-        summaries : float(any, n_summaries)
+        summaries : float(n_targets, n_points, n_summaries)
             The summaries of prerun simulations (at parameter values
             corresponding to the values in `parameters`)
-        distances : float(n_targets, any) or None, default=None
+        distances : float(n_targets, n_points) or None, default=None
             The distances of the summaries from the summaries of each target.
             If None then the distances will be calculated
         replace : bool, default=False
@@ -544,6 +585,13 @@ class PopulationMonteCarlo(ApproximateBayesianComputation):
         self.distances.size = self.distances.all.shape[-1]
 
     def set_accepted(self, smoothing=None):
+        """Container values to list of accepted attributes, builds marginals
+
+        Parameters
+        ----------
+        smoothing : float or None, default=None
+            A Gaussian smoothing for the marginal distributions
+        """
         self.parameters.accepted = [params for params in self.parameters.all]
         self.parameters.n_accepted = [
             params.shape[0] for params in self.parameters.all]
@@ -561,6 +609,7 @@ class PopulationMonteCarlo(ApproximateBayesianComputation):
         self.marginals = self.get_marginals(smoothing=smoothing)
 
     def w_cov(self, proposed, weighting):
+
         weighted_samples = proposed * weighting[:, np.newaxis]
         return weighted_samples.T.dot(
             weighted_samples) / weighting.T.dot(weighting)
@@ -574,6 +623,18 @@ class tmvn():
     loc : float(any, n_params)
         The mean of any number of input distributions
     scale : float(any, n_params, n_params)
+        The cholesky matrix of the covariance
+    low : float(any, n_params)
+        The minimum value for the truncation for each parameter
+    high : float(any, n_params)
+        The maximum value for the truncation for each parameter
+    n_samples : int or None
+        The number of different distributions to make (equivalent to
+        `batch_shape`)
+    n_params : int
+        The number of parameters (equivalent to `event_shape`)
+    max_counter : int
+        Number of iterations to try to get accepted samples (within truncation)
     """
     def __init__(self, loc, scale, low, high, max_counter=int(1e3)):
         self.loc = loc

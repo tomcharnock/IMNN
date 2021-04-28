@@ -3,28 +3,15 @@ Summarising the mean and the variance
 
 .. code:: ipython3
 
-    %load_ext autoreload
-    %autoreload 2
-
-.. code:: ipython3
-
     import jax
     import jax.numpy as np
     import tensorflow_probability
     import matplotlib.pyplot as plt
     from functools import partial
-    import imnn
+    import imnn.lfi
     tfp = tensorflow_probability.substrates.jax
     tfd = tfp.distributions
-    rng = jax.random.PRNGKey(0)
-
-
-.. parsed-literal::
-
-    /Users/tomcharnock/.pyenv/versions/3.7.9/lib/python3.7/site-packages/pandas/compat/__init__.py:120: UserWarning: Could not import the lzma module. Your installed Python is incomplete. Attempting to use lzma compression will result in a RuntimeError.
-      warnings.warn(msg)
-    WARNING:absl:No GPU/TPU found, falling back to CPU. (Set TF_CPP_MIN_LOG_LEVEL=0 and rerun for more info.)
-
+    rng = jax.random.PRNGKey(2)
 
 For this example we are going use the LFI module to infer the unknown
 mean, :math:`\mu`, and variance, :math:`\Sigma`, of :math:`n_{\bf d}=10`
@@ -70,8 +57,8 @@ Now we can generate the target data
 .. code:: ipython3
 
     rng, parameter_key, simulator_key = jax.random.split(rng, num=3)
-    target_θ = prior.sample(3, seed=parameter_key)
-    target_data = likelihood(target_θ).sample(seed=parameter_key)
+    target_θ = np.array([[-1, 5], [8, 0.5], [2, 3]])#prior.sample(3, seed=parameter_key)
+    target_data = likelihood(target_θ).sample(seed=simulator_key)
 
 .. code:: ipython3
 
@@ -84,7 +71,7 @@ Now we can generate the target data
 
 
 
-.. image:: output_10_0.png
+.. image:: output_9_0.png
 
 
 As well as knowing the likelihood for this problem, we also know what
@@ -110,9 +97,9 @@ This means we can make an exact compression function
 
 .. parsed-literal::
 
-    Mean and variance of observed data = [[-5.1679134  2.8647976]
-     [ 1.0372021  8.553281 ]
-     [ 4.6259356  9.004491 ]]
+    Mean and variance of observed data = [[-0.95406663  7.982314  ]
+     [ 8.011085    0.34187225]
+     [ 1.7216978   1.6701807 ]]
 
 
 We might want to know how likely it is that any particular parameters of
@@ -140,7 +127,7 @@ We can evaluate the analytic posterior using:
 
 .. parsed-literal::
 
-    DeviceArray([-162.34831,  -62.63305, -166.50655], dtype=float32)
+    DeviceArray([ -58.95049 , -337.08444 ,  -37.659824], dtype=float32)
 
 
 
@@ -148,7 +135,7 @@ And plot the contours like:
 
 .. code:: ipython3
 
-    LFI = imnn.lfiLikelihoodFreeInference(prior=prior, gridsize=200)
+    LFI = imnn.lfi.LikelihoodFreeInference(prior=prior, gridsize=200)
     LFI.n_targets = 3
     raveled_ranges = np.stack(
         [np.repeat(LFI.ranges[0], LFI.ranges[1].shape[0]),
@@ -166,7 +153,7 @@ And plot the contours like:
 
 
 
-.. image:: output_20_0.png
+.. image:: output_19_0.png
 
 
 In the ``lfi`` submodule there are a handful of functions which allow us
@@ -182,13 +169,15 @@ parameter values
 
 .. code:: ipython3
 
-    F = - np.array([[- 10. / 1., 0.], [0., - 10. / (2. * 10.**2.)]])
+    def F(Σ, n_d):
+        return - np.array([[- n_d / Σ, 0.], [0., - n_d / (2. * Σ**2.)]])
 
 .. code:: ipython3
 
+    parameter_estimates = compressor(target_data)
     GA = imnn.lfi.GaussianApproximation(
-        target_summaries=compressor(target_data), 
-        invF=np.linalg.inv(F),
+        parameter_estimates=parameter_estimates, 
+        invF=np.stack([np.linalg.inv(F(pe[1], 10.)) for pe in parameter_estimates], 0),
         prior=prior,
         gridsize=200)
 
@@ -204,7 +193,7 @@ to make an approximation to posterior.
 
 
 
-.. image:: output_26_0.png
+.. image:: output_25_0.png
 
 
 Approximate Bayesian computation
@@ -226,19 +215,20 @@ of ϵ, the worse the approximation to the posterior.
         target_data=target_data, 
         prior=prior, 
         simulator=lambda key, θ: likelihood(θ).sample(seed=key),
-        compressor=compressor)
+        compressor=compressor,
+        F=np.stack([F(pe[1], 10.) for pe in parameter_estimates], 0))
 
 .. code:: ipython3
 
     rng, key = jax.random.split(rng)
     ABC(rng=key, n_samples=int(1e5), 
-        min_accepted=10000, max_iterations=100, 
+        min_accepted=1000, max_iterations=100, 
         ϵ=1, smoothing=1);
 
 
 .. parsed-literal::
 
-    2195 accepted in last  4 iterations  (400000 simulations done).
+    [40968  1008 10615] accepted in last  16 iterations  (1600000 simulations done).
 
 
 .. code:: ipython3
@@ -258,7 +248,7 @@ of ϵ, the worse the approximation to the posterior.
 
 
 
-.. image:: output_30_0.png
+.. image:: output_29_0.png
 
 
 .. code:: ipython3
@@ -267,11 +257,11 @@ of ϵ, the worse the approximation to the posterior.
 
 
 
-.. image:: output_31_0.png
+.. image:: output_30_0.png
 
 
-Population Monte Carlo
-----------------------
+Population Monte Carlo (currently seems to have a bug)
+------------------------------------------------------
 
 Whilst we can obtain approximate posteriors using ABC, the rejection
 rate is very high because we sample always from the prior. Population
@@ -291,20 +281,21 @@ The whole module works very similarly to
 
     PMC = imnn.lfi.PopulationMonteCarlo(
         target_data=target_data, 
-        prior=prior, 
+        prior=prior,
         simulator=lambda key, θ: likelihood(θ).sample(seed=key),
-        compressor=compressor)
+        compressor=compressor,
+        F=np.stack([F(pe[1], 10) for pe in parameter_estimates], 0))
 
 .. code:: ipython3
 
-    PMC(rng=key, n_initial_points=10000, n_points=1000,
-        percentile=75, acceptance_ratio=0.1, max_iteration=10,
-        max_acceptance=10, max_samples=int(1e3), smoothing=1);
+    rng, key = jax.random.split(rng)
+    PMC(rng=key, n_points=1000, n_initial_points=10000,
+        percentile=None, acceptance_ratio=0.01, smoothing=1);
 
 
 .. parsed-literal::
 
-    Acceptance reached [0.07512521 0.0987734  0.09191176] in [2 3 4] iterations with a total of [3240 3353 4320] draws
+    Acceptance reached [0. 0. 0.] in [1 1 1] iterations with a total of [1 1 1] draws
 
 
 .. code:: ipython3
@@ -327,7 +318,7 @@ The whole module works very similarly to
 
 
 
-.. image:: output_35_0.png
+.. image:: output_34_0.png
 
 
 .. code:: ipython3
@@ -336,5 +327,5 @@ The whole module works very similarly to
 
 
 
-.. image:: output_36_0.png
+.. image:: output_35_0.png
 

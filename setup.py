@@ -24,10 +24,9 @@ setuptools.setup(
     install_requires=[
         "jax>=0.2.10",
         "jaxlib>=0.1.62",
-        # "tensorflow>=2.1.0",
         "tensorflow",
         "tqdm>=4.48.2",
-        "tensorflow_probability",
+        "tensorflow-probability[jax]",
         "numpy",
         "scipy",
         "matplotlib"],
