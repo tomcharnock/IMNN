@@ -1,7 +1,7 @@
 IMNN: Information maximising neural networks
 ============================================
 
-`IMNN documentation <https://www.aquila-consortium.org/doc/imnn/>`_ `pypi 0.3.0 <https://pypi.org/project/IMNN/>`_ `doi 10.1103/PhysRevD.97.083004 <https://doi.org/10.1103/PhysRevD.97.083004>`_
+|doc| |pypi| |bit| |git| |doi| |zen|
 
 The IMNN is a statistical method for transformation and compression of data from complex, high-dimensional distributions down to the number of physical parameters in the model which generates that data. It is asymptotically lossless in terms of information about the physical parameters. The method uses neural networks as a backbone for the transformation although any parameterised transformation with enough flexibility to map the data could be used.
 
@@ -650,3 +650,21 @@ and maybe also
       version = {0.3.0},
       year = {2021},
     }
+
+.. |doc| image:: docs/_images/doc.svg
+    :target: https://www.aquila-consortium.org/doc/imnn/
+
+.. |pypi| image:: docs/_images/pypi.svg
+    :target: https://pypi.org/project/IMNN/
+
+.. |bit| image:: docs/_images/bit.svg
+    :target: https://bitbucket.org/tomcharnock/imnn
+
+.. |git| image:: docs/_images/git.svg
+    :target: https://github.com/tomcharnock/imnn
+
+.. |doi| image:: https://zenodo.org/badge/DOI/10.1103/PhysRevD.97.083004.svg
+   :target: https://doi.org/10.1103/PhysRevD.97.083004
+
+.. |zen| image:: https://zenodo.org/badge/DOI/10.5281/zenodo.1175196.svg
+   :target: https://doi.org/10.5281/zenodo.1175196
