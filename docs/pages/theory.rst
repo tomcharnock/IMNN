@@ -1,2 +1,0 @@
-Information maximising neural networks
-======================================

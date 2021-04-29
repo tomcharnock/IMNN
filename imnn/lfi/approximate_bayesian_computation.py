@@ -725,11 +725,11 @@ class ApproximateBayesianComputation(LikelihoodFreeInference):
                 np.linspace(
                     np.min(
                         np.array([
-                            np.min(self.summaries.accepted[target][:, summary])
+                            np.min(points[target][:, summary])
                             for target in targets])),
                     np.max(
                         np.array([
-                            np.max(self.summaries.accepted[target][:, summary])
+                            np.max(points[target][:, summary])
                             for target in targets])),
                     gridsize[summary])
                 for summary in range(n_summaries)]

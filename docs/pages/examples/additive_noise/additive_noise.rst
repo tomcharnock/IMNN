@@ -50,15 +50,15 @@ zero and variance 1.
     n_params = 1
     n_summaries = 1
     input_shape = (100,)
-    
+
     n_s = 2000
     n_d = 1000
-    
+
     n_noise = 500
-    
+
     m_fid = np.array([1.])
     δm = np.array([0.1])
-    
+
     x = np.linspace(0, 10, input_shape[0])
 
 The noises (which are not expensive in this case, but could be in
@@ -89,26 +89,26 @@ training and the validation
     mx = np.expand_dims(m_fid[0] + ζ, 1) * np.expand_dims(x, 0)
     mx_mp = np.expand_dims(
         np.stack(
-            [(np.expand_dims((m_fid[0] - δm[0] / 2) + ζ[:n_d], 1) 
+            [(np.expand_dims((m_fid[0] - δm[0] / 2) + ζ[:n_d], 1)
                  * np.expand_dims(x, 0)),
-             (np.expand_dims((m_fid[0] + δm[0] / 2) + ζ[:n_d], 1) 
+             (np.expand_dims((m_fid[0] + δm[0] / 2) + ζ[:n_d], 1)
                  * np.expand_dims(x, 0))],
             1),
         2)
-    
-    validation_mx = (np.expand_dims(m_fid[0] + validation_ζ, 1) 
+
+    validation_mx = (np.expand_dims(m_fid[0] + validation_ζ, 1)
         * np.expand_dims(x, 0))
     validation_mx_mp = np.expand_dims(
         np.stack(
-            [(np.expand_dims((m_fid[0] - δm[0] / 2) + validation_ζ[:n_d], 1) 
+            [(np.expand_dims((m_fid[0] - δm[0] / 2) + validation_ζ[:n_d], 1)
                   * np.expand_dims(x, 0)),
-             (np.expand_dims((m_fid[0] + δm[0] / 2) + validation_ζ[:n_d], 1) 
+             (np.expand_dims((m_fid[0] + δm[0] / 2) + validation_ζ[:n_d], 1)
                   * np.expand_dims(x, 0))],
             1),
         2)
 
 Constructing a new IMNN
-~~~~~~~~~~~~~~~~~~~~~~~
+-----------------------
 
 Now we can construct the new IMNN. For our example we’ll imagine that we
 want to use the AggregatedNumericalGradientIMNN (normally used for large
@@ -151,7 +151,7 @@ derivative.
             super().__init__(**kwargs)
             self.noise = noise
             self.n_noise = self.noise.shape[0]
-        
+
         def get_summary(self, inputs, w, θ, derivative=False, gradient=False):
             def fn(inputs, w):
                 d, key = inputs
@@ -163,7 +163,7 @@ derivative.
                 return self._construct_gradient(dx_dw, aux=dΛ_dx, func="einsum")
             else:
                 return fn(inputs, w)
-    
+
         def _collect_input(self, key, validate=False):
             def generator(dataset=None, key=None, total=None):
                 i = 0
@@ -179,9 +179,9 @@ derivative.
                 derivative = self.derivative
             keys = np.array(jax.random.split(key, num=self.n_s))
             return (
-                [partial(generator, dataset=fid, key=key, total=key.shape[0])() 
+                [partial(generator, dataset=fid, key=key, total=key.shape[0])()
                  for fid, key in zip(fiducial, keys.reshape(self.fiducial_batch_shape + (2,)))],
-                [partial(generator, dataset=der, key=key, total=key.shape[0])() 
+                [partial(generator, dataset=der, key=key, total=key.shape[0])()
                  for der, key in zip(derivative, np.repeat(keys[:n_d], 2 * self.n_params, axis=0).reshape(
                      self.derivative_batch_shape + (2,)))])
 
@@ -213,9 +213,9 @@ time per device before running out of memory.
 
     rng, key = jax.random.split(rng)
     imnn = NoiseIMNN(
-        noise=ϵ, 
-        n_s=n_s, 
-        n_d=n_d, 
+        noise=ϵ,
+        n_s=n_s,
+        n_d=n_d,
         n_params=n_params,
         n_summaries=n_summaries,
         input_shape=input_shape,
@@ -224,11 +224,11 @@ time per device before running out of memory.
         optimiser=optimiser,
         key_or_state=key,
         fiducial=mx,
-        derivative=mx_mp, 
+        derivative=mx_mp,
         δθ=δm,
-        host=jax.devices("cpu")[0], 
-        devices=jax.devices(), 
-        n_per_device=100, 
+        host=jax.devices("cpu")[0],
+        devices=jax.devices(),
+        n_per_device=100,
         validation_fiducial=validation_mx,
         validation_derivative=validation_mx_mp)
 
@@ -272,9 +272,9 @@ going to first generate some data to infer:
 .. code:: ipython3
 
     rng, key = jax.random.split(rng)
-    
+
     target_m = 3.
-    y_target = (target_m * x + np.sqrt(0.1) 
+    y_target = (target_m * x + np.sqrt(0.1)
                 * jax.random.normal(key, shape=input_shape))
 
 We’ll make a bunch of new simulations for the ABC too. First we’ll draw
@@ -288,16 +288,16 @@ parameter values used to make these simulations (because there are now
 .. code:: ipython3
 
     rng, key = jax.random.split(rng)
-    
+
     m_ABC = np.expand_dims(
         jax.random.uniform(
             key, minval=0., maxval=10., shape=(5000,)),
         1)
     y_ABC = np.einsum(
-        "ij,kj->ikj", 
-        m_ABC * x, 
+        "ij,kj->ikj",
+        m_ABC * x,
         ϵ).reshape((-1,) + input_shape)
-    
+
     parameters = np.repeat(m_ABC, n_noise, axis=0)
     summaries = imnn.get_estimate(y_ABC)
 
@@ -318,11 +318,11 @@ the IMNN as the compression function for ``y_target``
 .. code:: ipython3
 
     ABC = ApproximateBayesianComputation(
-        target_data=y_target, 
-        prior=prior, 
-        simulator=None, 
+        target_data=y_target,
+        prior=prior,
+        simulator=None,
         compressor=imnn.get_estimate,
-        gridsize=100, 
+        gridsize=100,
         F=imnn.F)
 
 We can then run the ABC with an :math:`\epsilon=0.1` with the compressed
@@ -338,8 +338,8 @@ used to generate the target data for completeness.
 
 .. code:: ipython3
 
-    plt.hist(ABC.parameters.accepted[0][:, 0], 
-             range=[0, 10], 
+    plt.hist(ABC.parameters.accepted[0][:, 0],
+             range=[0, 10],
              bins=25,
              density=True)
     plt.axvline(target_m, linestyle="dashed", color="black")
@@ -348,4 +348,3 @@ used to generate the target data for completeness.
 
 
 .. image:: output_31_0.png
-

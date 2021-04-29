@@ -1,8 +1,8 @@
 import setuptools
-# import io
+import io
 
-# with io.open("README.rst", "r", encoding="utf-8") as fh:
-#     long_description = fh.read()
+with io.open("README.rst", "r", encoding="utf-8") as fh:
+    long_description = fh.read()
 
 setuptools.setup(
     name="imnn",
@@ -11,8 +11,8 @@ setuptools.setup(
     author_email="charnock@iap.fr",
     description="Using neural networks to extract sufficient statistics from \
         data by maximising the Fisher information",
-    # long_description=long_description,
-    # long_description_content_type="text/reStructuredText",
+    long_description=long_description,
+    long_description_content_type="text/reStructuredText",
     url="https://bitbucket.org/tomcharnock/IMNN.git",
     packages=["imnn", "imnn.imnn", "imnn.utils", "test", "examples", "docs"],
     classifiers=[

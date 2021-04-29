@@ -26,7 +26,7 @@ class _AggregatedIMNN:
     .. math::
         \\Lambda = -\\log|\\bf{F}| + r(\\Lambda_2) \\Lambda_2
 
-    (See :doc:`/pages/theory`) can be calculated and its gradient with respect
+    (See :doc:`/pages/details`) can be calculated and its gradient with respect
     to these summaries, :math:`\\frac{\\partial\\Lambda}{\\partial x_i^j}` and
     derivatives :math:`\\frac{\\partial\\Lambda}{\\partial\\partial{x_i^j}/
     \\partial\\theta_\\alpha}` calculated, where :math:`i` labels the network
