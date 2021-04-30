@@ -1,8 +1,6 @@
 IMNN: Information maximising neural networks
 ============================================
 
-`IMNN documentation <https://www.aquila-consortium.org/doc/imnn/>`_ `pypi 0.3.0 <https://pypi.org/project/IMNN/>`_ `doi 10.1103/PhysRevD.97.083004 <https://doi.org/10.1103/PhysRevD.97.083004>`_
-
 The IMNN is a statistical method for transformation and compression of data from complex, high-dimensional distributions down to the number of physical parameters in the model which generates that data. It is asymptotically lossless in terms of information about the physical parameters. The method uses neural networks as a backbone for the transformation although any parameterised transformation with enough flexibility to map the data could be used.
 
 Using simulations generated from the model the Fisher information (for a Gaussian distribution with parameter independent covariance) is calculated from the output of the transformation and its log determinant is maximised under the condition that the covariance of the outputted transformed simulations are approximately constant and approach the identity matrix.
@@ -397,8 +395,8 @@ Or for a `NumericalGradientIMNN`_
 ``λ`` and ``ϵ`` control the strength of regularisation and should help with speed of convergence but not really impact the final results.
 
 
-References
-----------
+Citing work
+-----------
 
 If you use this code please cite
 

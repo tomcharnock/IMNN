@@ -601,7 +601,7 @@ During the development of this code I implemented the value_and_jac* functions i
 
 or whichever CUDA enabled version suits you.
 
-The previous version of the IMNN is still available (and works well) built on a TensorFlow backend. If you want to use keras models, etc. it will probably be easier to use that. It is not as complete this module, but is likely to be a bit more stable due to not depending on JAXs development as heavily. This can be installed via either
+The previous version of the IMNN is still available (and works well) built on a TensorFlow backend. If you want to use keras models, etc. it will probably be easier to use that. It is not as complete as this module, but is likely to be a bit more stable due to not depending on JAXs development as heavily. This can be installed via either
 
 .. code-block::
 

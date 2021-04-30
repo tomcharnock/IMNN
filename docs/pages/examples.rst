@@ -9,11 +9,9 @@ Whilst there are many specific ways to use the IMNN depending on the size of the
 
    examples/subclasses
    examples/lfi
-   examples/mean_and_variance
    examples/2d_field_inference/2d_field_inference
    examples/additive_noise/additive_noise
-   examples/iterative_convergence
-   examples/imnn_vs_regression
+   examples/imnn_vs_regression/imnn_vs_regression
 
 
 IMNN
