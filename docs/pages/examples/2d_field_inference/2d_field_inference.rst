@@ -158,9 +158,9 @@ we get a Fisher information matrix equal to
 
 .. parsed-literal::
 
-    F = [[   8.09111181 -112.90703247]
-     [-112.90703247 1690.49264978]]
-    det(F) = 929.9670599963398
+    F = [[ 1984.5        -1545.06379524]
+     [-1545.06379524  1690.49264978]]
+    det(F) = 967560.5321330631
 
 
 2D Gaussian random field simulator in jax
@@ -201,7 +201,17 @@ To create a 2D Gaussian random field we can follow these steps:
 We are going to build a broadcastable jax simultor which takes in a
 variety of different shaped parameter arrays and vmaps them until a
 single parameter pair are passed. This is very efficient for performing
-the ABC for example.
+the ABC for example. We’re also going make our simulator so that it
+could have additive foregrounds (although we won’t use them in this
+example) as well as a generator for log normal fields where the
+:math:`P(k)` for the Fourier modes are transformed as
+
+.. math:: P(k)\to\ln(1+P(k))
+
+and rescaled by the volume of the simulation before generating the
+field, and then the field is transformed as
+
+.. math:: \phi\to \exp\left(\phi - \frac{\langle\phi\phi\rangle}{2}\right) - 1
 
 .. code:: ipython3
 
@@ -268,11 +278,14 @@ the ABC for example.
                 fourier_field,
                 np.zeros(dim, dtype=int),
                 np.zeros((1,)))
-            field = np.real(np.fft.ifftn(fourier_field)) * fft_norm * np.sqrt(V)
-                
+            
             if log_normal:
+                field = np.real(np.fft.ifftn(fourier_field)) * fft_norm * np.sqrt(V)
                 sg = np.var(field)
                 field = np.exp(field - sg / 2.) - 1.
+            
+            else:
+                field = np.real(np.fft.ifftn(fourier_field) * fft_norm * np.sqrt(V)**2)
                 
             if simulator_args["N_scale"]:
                 field *= scale    
@@ -347,7 +360,8 @@ Now we can simulate some target data at, for example,
     
     rng, key = jax.random.split(rng)
     δ_target = simulator(key, θ_target, simulator_args=simulator_args)
-    plt.imshow(δ_target);
+    plt.imshow(δ_target)
+    plt.colorbar();
 
 
 
@@ -366,7 +380,8 @@ distribution over :math:`A` and :math:`B`) with values between 0.1 and
     prior.low = np.array([0.1, 0.1])
     prior.high = np.array([1.25, 1.25])
 
-To evaluate the likelihood of this field we can now use
+To evaluate the likelihood of this field we can now use (dividing the
+target :math:`\delta` by :math:`N` to remove added scaling)
 
 .. code:: ipython3
 
@@ -376,37 +391,28 @@ To evaluate the likelihood of this field we can now use
     A, B = np.meshgrid(*LFI.ranges)
     LFI.n_targets=1
     LFI.put_marginals(
-        np.exp(
-            log_likelihood(
-                k, 
-                A.ravel(), 
-                B.ravel(), 
-                np.fft.fft2(δ_target), 
-                N).reshape((1, 100, 100))));
+            jax.nn.softmax(
+                np.real(
+                    log_likelihood(
+                        k, 
+                        A.ravel(), 
+                        B.ravel(), 
+                        np.fft.fftn(δ_target / N), 
+                        N)
+                    ),axis=0
+                ).reshape((100, 100)).T[np.newaxis]);
     LFI.marginal_plot(
         known=θ_target,          
         label="Analytic likelihood",           
         axis_labels=["A", "B"]);
 
 
-.. parsed-literal::
 
-    /Users/tomcharnock/.pyenv/versions/3.9.4/lib/python3.9/site-packages/numpy/core/_asarray.py:83: ComplexWarning: Casting complex values to real discards the imaginary part
-      return array(a, dtype, copy=False, order=order)
-    /Users/tomcharnock/.pyenv/versions/3.9.4/lib/python3.9/site-packages/numpy/ma/core.py:2831: ComplexWarning: Casting complex values to real discards the imaginary part
-      _data = np.array(data, dtype=dtype, copy=copy,
-    /Users/tomcharnock/.pyenv/versions/3.9.4/lib/python3.9/site-packages/matplotlib/contour.py:1105: ComplexWarning: Casting complex values to real discards the imaginary part
-      self.levels = np.asarray(levels_arg).astype(np.float64)
-    /Users/tomcharnock/.pyenv/versions/3.9.4/lib/python3.9/site-packages/numpy/core/_asarray.py:83: ComplexWarning: Casting complex values to real discards the imaginary part
-      return array(a, dtype, copy=False, order=order)
-
-
-
-.. image:: output_22_1.png
+.. image:: output_22_0.png
 
 
 Training an IMNN
-----------------
+~~~~~~~~~~~~~~~~
 
 Now lets train an IMNN to summaries such Gaussian random fields to see
 how much information we can extract an what sort of constraints we can
@@ -484,7 +490,7 @@ in each layer
 
 .. code:: ipython3
 
-    fs = 62
+    fs = 64
     
     model = stax.serial(
             InceptBlock((fs, fs, fs), strides=(4, 4)),
@@ -499,14 +505,14 @@ We’ll also grab an adam optimiser from jax.experimental.optimizers
 
 .. code:: ipython3
 
-    optimiser = optimizers.adam(step_size=1e-1)
+    optimiser = optimizers.adam(step_size=1e-3)
 
 Note that due to the form of the network we’ll want to have simulations
 that have a “channel” dimension, which we can set up by not allowing for
 squeezing in the simulator.
 
 Initialise IMNN
-~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^
 
 Finally we can initialise the IMNN, letting the IMNN module decide what
 type of IMNN subclass will be used (we’ll be using SimulatorIMNN)
@@ -541,14 +547,15 @@ early stopping to determine the end of fitting.
 
 .. code:: ipython3
 
+    %%time
     rng, key = jax.random.split(rng)
-    IMNN.fit(λ=10., ϵ=0.1, rng=key, print_rate=1, min_iterations=1000, best=False)
-
+    IMNN.fit(λ=10., ϵ=0.1, rng=key, print_rate=None, min_iterations=500, best=True)
 
 
 .. parsed-literal::
 
-    0it [00:00, ?it/s]
+    CPU times: user 13min 48s, sys: 6.06 s, total: 13min 54s
+    Wall time: 14min 2s
 
 
 .. code:: ipython3
@@ -560,8 +567,29 @@ early stopping to determine the end of fitting.
 .. image:: output_38_0.png
 
 
+.. code:: ipython3
+
+    np.linalg.det(IMNN.F) / np.linalg.det(F)
+
+
+
+
+.. parsed-literal::
+
+    DeviceArray(0.97123594, dtype=float64)
+
+
+
+After nearly 1400 iterations of fitting we obtain (at the last
+iteration) over 97% of the information. The maximum value of the log
+determinant of the Fisher information obtained by the IMNN is slightly
+over the analytic value because it is estimated over a limited set which
+might accidentally have more information due to the stochastic
+realisation. For this reason we choose the Fisher information at the
+last iterations rather than the best fit.
+
 Inference
----------
+~~~~~~~~~
 
 We can now attempt to do inference of some target data using the IMNN.
 The first thing we should do is make a Gaussian approximation using a
@@ -585,7 +613,7 @@ the covariance will likely be misleading.
 
 
 
-.. image:: output_40_0.png
+.. image:: output_42_0.png
 
 
 And finally we can do an approximate Bayesian computation
@@ -595,7 +623,7 @@ And finally we can do an approximate Bayesian computation
     ABC = imnn.lfi.ApproximateBayesianComputation(
         target_data=np.expand_dims(δ_target, (0, 1, 2)),
         prior=prior,
-        simulator=lambda rng, θ: simulator(rng, θ, simulator_args=simulator_args),
+        simulator=lambda rng, θ: simulator(rng, θ, simulator_args={**simulator_args, **{'squeeze':False}}),
         compressor=IMNN.get_estimate,
         gridsize=100, 
         F=np.expand_dims(IMNN.F, 0))
@@ -609,7 +637,7 @@ And finally we can do an approximate Bayesian computation
 
 .. parsed-literal::
 
-    [153] accepted in last  1000 iterations  (10000000 simulations done).
+    [1010] accepted in last  43 iterations  (430000 simulations done).
 
 
 .. code:: ipython3
@@ -621,31 +649,20 @@ And finally we can do an approximate Bayesian computation
     GA.marginal_plot(
         ax=ax,
         label="Gaussian approximation",
-        colours="C1")
+        colours="C1", 
+        axis_labels=["A", "B"])
     ABC.marginal_plot(
         ax=ax,
         label="Approximate Bayesian computation",
         colours="C2");
 
 
-.. parsed-literal::
 
-    /Users/tomcharnock/.pyenv/versions/3.9.4/lib/python3.9/site-packages/numpy/core/_asarray.py:83: ComplexWarning: Casting complex values to real discards the imaginary part
-      return array(a, dtype, copy=False, order=order)
-    /Users/tomcharnock/.pyenv/versions/3.9.4/lib/python3.9/site-packages/numpy/ma/core.py:2831: ComplexWarning: Casting complex values to real discards the imaginary part
-      _data = np.array(data, dtype=dtype, copy=copy,
-    /Users/tomcharnock/.pyenv/versions/3.9.4/lib/python3.9/site-packages/matplotlib/contour.py:1105: ComplexWarning: Casting complex values to real discards the imaginary part
-      self.levels = np.asarray(levels_arg).astype(np.float64)
-    /Users/tomcharnock/.pyenv/versions/3.9.4/lib/python3.9/site-packages/numpy/core/_asarray.py:83: ComplexWarning: Casting complex values to real discards the imaginary part
-      return array(a, dtype, copy=False, order=order)
-
-
-
-.. image:: output_44_1.png
+.. image:: output_46_0.png
 
 
 Cosmological parameter inference of log normal fields
-=====================================================
+-----------------------------------------------------
 
 As a more realistic example of cosmological parameter inference from
 dark matter fields, albeit it one where we do not (yet) know the amount
@@ -679,11 +696,56 @@ as
         L=250,
         shape=shape,
         vol_norm=True,
-        N_scale=True,
+        N_scale=False,
         squeeze=True)
 
-We’ll now make our universe that we observe a little more realistic with
-:math:`\Omega_c=0.35` and :math:`\sigma_8=0.8`
+Since our lognormal field simulator *and* power spectra code are
+differentiable via ``JAX``, we can simulate a *differentiable* universe.
+We’ll pull out a nice function to visualize fiducial example data and
+its derivatives with respect to the cosmological parameters.
+
+.. code:: ipython3
+
+    from imnn.utils import value_and_jacrev, value_and_jacfwd
+    
+    simulation, simulation_gradient = value_and_jacfwd(
+        simulator, argnums=1)(
+        rng, θ_fid, simulator_args=simulator_args, log_normal=True)
+
+.. code:: ipython3
+
+    from mpl_toolkits.axes_grid1 import make_axes_locatable
+    fig,ax = plt.subplots(nrows=1, ncols=3, figsize=(12,15))
+    
+    im1 = ax[0].imshow(np.squeeze(simulation), extent=(0,1,0,1))
+    ax[0].title.set_text(r'example fiducial $\rm d$')
+    divider = make_axes_locatable(ax[0])
+    cax = divider.append_axes('right', size='5%', pad=0.05)
+    fig.colorbar(im1, cax=cax, orientation='vertical')
+    
+    im1 = ax[1].imshow(np.squeeze(simulation_gradient).T[0].T, extent=(0,1,0,1))
+    ax[1].title.set_text(r'$\nabla_{\Omega_m} \rm d$')
+    divider = make_axes_locatable(ax[1])
+    cax = divider.append_axes('right', size='5%', pad=0.05)
+    fig.colorbar(im1, cax=cax, orientation='vertical')
+    
+    im1 = ax[2].imshow(np.squeeze(simulation_gradient).T[1].T, extent=(0,1,0,1))
+    ax[2].title.set_text(r'$\nabla_{\sigma_8} \rm d$')
+    divider = make_axes_locatable(ax[2])
+    cax = divider.append_axes('right', size='5%', pad=0.05)
+    fig.colorbar(im1, cax=cax, orientation='vertical')
+    
+    for a in ax:
+        a.set_xticks([])
+        a.set_yticks([])
+
+
+
+.. image:: output_54_0.png
+
+
+We’ll now make the target universe that we observe a little more
+realistic with :math:`\Omega_c=0.35` and :math:`\sigma_8=0.8`
 
 .. code:: ipython3
 
@@ -693,11 +755,12 @@ We’ll now make our universe that we observe a little more realistic with
     δ_target = simulator(
         key, θ_target, simulator_args=simulator_args, 
         log_normal=True)
-    plt.imshow(δ_target);
+    plt.imshow(δ_target)
+    plt.colorbar();
 
 
 
-.. image:: output_51_0.png
+.. image:: output_56_0.png
 
 
 We can now train an IMNN as before
@@ -716,7 +779,10 @@ We can now train an IMNN as before
             optimiser=optimiser,
             key_or_state=key,
             simulator=lambda rng, θ: simulator(
-                rng, θ, simulator_args={**simulator_args, **{"squeeze": False}}))
+                rng, θ, 
+                simulator_args={**simulator_args, 
+                                **{"squeeze": False}}, 
+                log_normal=True))
 
 
 .. parsed-literal::
@@ -727,22 +793,16 @@ We can now train an IMNN as before
 .. code:: ipython3
 
     rng, key = jax.random.split(rng)
-    IMNN.fit(λ=10., ϵ=0.1, rng=key, print_rate=1, min_iterations=1000, best=False)
-
-
-
-.. parsed-literal::
-
-    0it [00:00, ?it/s]
-
+    IMNN.fit(λ=10., ϵ=0.1, rng=key, print_rate=None, 
+             min_iterations=500, best=False)
 
 .. code:: ipython3
 
-    IMNN.plot(expected_detF=np.linalg.det(F));
+    IMNN.plot(expected_detF=None);
 
 
 
-.. image:: output_55_0.png
+.. image:: output_60_0.png
 
 
 And finally we can do our inference. We’ll first set the prior
@@ -752,7 +812,7 @@ distribution
 
     prior = tfp.distributions.Blockwise(
         [tfp.distributions.Uniform(low=low, high=high)
-         for low, high in zip([0., 0.], [1., 1.25])])
+         for low, high in zip([0.1, 0.1], [1., 1.25])])
     prior.low = np.array([0., 0.])
     prior.high = np.array([1., 1.25])
 
@@ -761,7 +821,8 @@ And make the Gaussian approximation using the Fisher information
 .. code:: ipython3
 
     GA = imnn.lfi.GaussianApproximation(
-        parameter_estimates=IMNN.get_estimate(np.expand_dims(δ_target, (0, 1, 2))), 
+        parameter_estimates=IMNN.get_estimate(
+            np.expand_dims(δ_target, (0, 1, 2))), 
         invF=np.expand_dims(np.linalg.inv(IMNN.F), 0), 
         prior=prior, 
         gridsize=100)
@@ -774,7 +835,10 @@ And then run the ABC
         target_data=np.expand_dims(δ_target, (0, 1, 2)),
         prior=prior,
         simulator=lambda rng, θ: simulator(
-            rng, θ, simulator_args={**simulator_args, **{"squeeze": False}}),
+            rng, θ, 
+            simulator_args={**simulator_args, 
+                            **{'squeeze':False}}, 
+            log_normal=True),
         compressor=IMNN.get_estimate,
         gridsize=100, 
         F=np.expand_dims(IMNN.F, 0))
@@ -782,14 +846,8 @@ And then run the ABC
 .. code:: ipython3
 
     rng, key = jax.random.split(rng)
-    ABC(ϵ=1., rng=key, n_samples=10000, min_accepted=1000, 
-        smoothing=1, max_iterations=1000);
-
-
-.. parsed-literal::
-
-    [11] accepted in last  1000 iterations  (10000000 simulations done).
-
+    ABC(ϵ=27., rng=key, n_samples=2000, min_accepted=1000, 
+        smoothing=1, max_iterations=20000);
 
 And then we can plot the constraints obtained using the IMNN and LFI
 
@@ -798,14 +856,9 @@ And then we can plot the constraints obtained using the IMNN and LFI
     ax = GA.marginal_plot(
         known=θ_target,          
         label="Gaussian approximation",         
-        axis_labels=["$\Omega_c$", "$\sigma_8"],
+        axis_labels=[r"$\Omega_c$", r"$\sigma_8$"],
         colours="C1")
     ABC.marginal_plot(
         ax=ax,
         label="Approximate Bayesian computation",
         colours="C2");
-
-
-
-.. image:: output_64_0.png
-

@@ -56,7 +56,7 @@ class ApproximateBayesianComputation(LikelihoodFreeInference):
     n_targets : int
         The number of different targets to be infered
     F : float(n_params, n_params)
-        The inverse Fisher information matrix for rescaling distance measure
+        The Fisher information matrix for rescaling distance measure
     parameters : utils container
         Holds accepted and rejected parameters and some summaries of results
     summaries : utils container
