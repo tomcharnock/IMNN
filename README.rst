@@ -377,7 +377,7 @@ So for example to initialise an ``AggregatedSimulatorIMNN`` and train it we can 
     IMNN.fit(λ=10., ϵ=0.1, rng=key)
     IMNN.plot(expected_detF=50.)
 
-.. image:: docs/_images/history_plot.png
+.. image:: https://bitbucket.org/tomcharnock/imnn/raw/master/docs/_images/history_plot.png
 
 Or for a`` NumericalGradientIMNN``
 
@@ -651,16 +651,16 @@ and maybe also
       year = {2021},
     }
 
-.. |doc| image:: docs/_images/doc.svg
+.. |doc| image:: https://bitbucket.org/tomcharnock/imnn/raw/master/docs/_images/doc.svg
     :target: https://www.aquila-consortium.org/doc/imnn/
 
-.. |pypi| image:: docs/_images/pypi.svg
+.. |pypi| image:: https://bitbucket.org/tomcharnock/imnn/raw/master/docs/_images/pypi.svg
     :target: https://pypi.org/project/IMNN/
 
-.. |bit| image:: docs/_images/bit.svg
+.. |bit| image:: https://bitbucket.org/tomcharnock/imnn/raw/master/docs/_images/bit.svg
     :target: https://bitbucket.org/tomcharnock/imnn
 
-.. |git| image:: docs/_images/git.svg
+.. |git| image:: https://bitbucket.org/tomcharnock/imnn/raw/master/docs/_images/git.svg
     :target: https://github.com/tomcharnock/imnn
 
 .. |doi| image:: https://zenodo.org/badge/DOI/10.1103/PhysRevD.97.083004.svg

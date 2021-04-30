@@ -6,17 +6,17 @@ with io.open("README.rst", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="imnn",
-    version="0.3dev",
+    version="0.3dev0",
     author="Tom Charnock",
     author_email="charnock@iap.fr",
     description="Using neural networks to extract sufficient statistics from \
         data by maximising the Fisher information",
     long_description=long_description,
-    long_description_content_type="text/reStructuredText",
-    url="https://bitbucket.org/tomcharnock/IMNN.git",
-    packages=["imnn", "imnn.imnn", "imnn.utils", "test", "examples", "docs"],
+    long_description_content_type="text/x-rst",
+    url="https://bitbucket.org/tomcharnock/imnn.git",
+    packages=["imnn", "imnn.imnn", "imnn.lfi", "imnn.utils"],
     classifiers=[
-        "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
@@ -30,4 +30,5 @@ setuptools.setup(
         "numpy",
         "scipy",
         "matplotlib"],
+    include_package_data=True
 )
