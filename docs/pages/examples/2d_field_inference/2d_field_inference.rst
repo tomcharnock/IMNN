@@ -160,7 +160,7 @@ we get a Fisher information matrix equal to
 
     F = [[ 1984.5        -1545.06379524]
      [-1545.06379524  1690.49264978]]
-    det(F) = 967560.5321330631
+    det(F) = 967560.5321330648
 
 
 2D Gaussian random field simulator in jax
@@ -215,7 +215,7 @@ field, and then the field is transformed as
 
 .. code:: ipython3
 
-    def simulator(rng, θ, simulator_args, log_normal=False, foregrounds=None):
+    def simulator(rng, θ, simulator_args, foregrounds=None):
         def fn(rng, A, B):
             dim = len(simulator_args["shape"])
             L = simulator_args["L"]
@@ -263,7 +263,7 @@ field, and then the field is transformed as
             if simulator_args['vol_norm']:
                 powers /= V
                 
-            if log_normal:
+            if simulator_args["log_normal"]:
                 powers = np.real(
                     np.fft.ifftshift(
                         np.fft.ifftn(
@@ -279,13 +279,15 @@ field, and then the field is transformed as
                 np.zeros(dim, dtype=int),
                 np.zeros((1,)))
             
-            if log_normal:
+            if simulator_args["log_normal"]:
                 field = np.real(np.fft.ifftn(fourier_field)) * fft_norm * np.sqrt(V)
                 sg = np.var(field)
                 field = np.exp(field - sg / 2.) - 1.
             
             else:
                 field = np.real(np.fft.ifftn(fourier_field) * fft_norm * np.sqrt(V)**2)
+                
+    
                 
             if simulator_args["N_scale"]:
                 field *= scale    
@@ -349,7 +351,8 @@ whether to normalise via the volume and squeeze the output dimensions
         shape=shape,
         vol_norm=True,
         N_scale=True,
-        squeeze=True)
+        squeeze=True,
+        log_normal=False)
 
 Now we can simulate some target data at, for example,
 :math:`A^\textrm{target}=0.7` and :math:`B^\textrm{target}=0.8`:
@@ -412,7 +415,7 @@ target :math:`\delta` by :math:`N` to remove added scaling)
 
 
 Training an IMNN
-~~~~~~~~~~~~~~~~
+----------------
 
 Now lets train an IMNN to summaries such Gaussian random fields to see
 how much information we can extract an what sort of constraints we can
@@ -441,18 +444,22 @@ implemented as
         filters3L for conv1x1,conv5x5"""
         
         filters1, filters2, filters3 = filters
-        conv1x1 = stax.serial(stax.Conv(filters1, (1, 1), strides, padding="SAME"))
+        conv1x1 = stax.serial(
+            stax.Conv(filters1, (1, 1), strides, padding="SAME"))
         
         filters4 = filters2
-        conv3x3 = stax.serial(stax.Conv(filters2, (1, 1), strides=None, padding="SAME"),
-                            stax.Conv(filters4, (3, 3), strides, padding="SAME"))
+        conv3x3 = stax.serial(
+            stax.Conv(filters2, (1, 1), strides=None, padding="SAME"),
+            stax.Conv(filters4, (3, 3), strides, padding="SAME"))
                             
         filters5 = filters3
-        conv5x5 = stax.serial(stax.Conv(filters3, (1, 1), strides=None, padding="SAME"),
-                             stax.Conv(filters5, (5, 5), strides, padding="SAME")) 
+        conv5x5 = stax.serial(
+            stax.Conv(filters3, (1, 1), strides=None, padding="SAME"),
+            stax.Conv(filters5, (5, 5), strides, padding="SAME")) 
         
-        maxpool = stax.serial(stax.MaxPool((3, 3), padding="SAME"),
-                             stax.Conv(filters4, (1, 1), strides, padding="SAME"))
+        maxpool = stax.serial(
+            stax.MaxPool((3, 3), padding="SAME"),                   
+            stax.Conv(filters4, (1, 1), strides, padding="SAME"))
                                 
         if do_3x3:
             if do_5x5:
@@ -512,7 +519,7 @@ that have a “channel” dimension, which we can set up by not allowing for
 squeezing in the simulator.
 
 Initialise IMNN
-^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~
 
 Finally we can initialise the IMNN, letting the IMNN module decide what
 type of IMNN subclass will be used (we’ll be using SimulatorIMNN)
@@ -589,7 +596,7 @@ realisation. For this reason we choose the Fisher information at the
 last iterations rather than the best fit.
 
 Inference
-~~~~~~~~~
+---------
 
 We can now attempt to do inference of some target data using the IMNN.
 The first thing we should do is make a Gaussian approximation using a
@@ -646,15 +653,22 @@ And finally we can do an approximate Bayesian computation
         known=θ_target,          
         label="Analytic likelihood",           
         axis_labels=["A", "B"])
+    
+    
     GA.marginal_plot(
         ax=ax,
         label="Gaussian approximation",
         colours="C1", 
         axis_labels=["A", "B"])
+    
+    
     ABC.marginal_plot(
         ax=ax,
         label="Approximate Bayesian computation",
         colours="C2");
+    
+    plt.show()
+
 
 
 
@@ -662,7 +676,7 @@ And finally we can do an approximate Bayesian computation
 
 
 Cosmological parameter inference of log normal fields
------------------------------------------------------
+=====================================================
 
 As a more realistic example of cosmological parameter inference from
 dark matter fields, albeit it one where we do not (yet) know the amount
@@ -670,11 +684,12 @@ of information in the field, we can create a log normal field from a
 power spectrum generated with cosmological parameters.
 
 For example lets say that our fiducial cosmology has
-:math:`\Omega_c=0.85` and :math:`\sigma_8=0.75`, we can set
+:math:`\Omega_c=0.40` and :math:`\sigma_8=0.75`, using ``jax-cosmo`` we
+can set
 
 .. code:: ipython3
 
-    cosmo_params = jc.Planck15(Omega_c=0.85, sigma8=0.75)
+    cosmo_params = jc.Planck15(Omega_c=0.40, sigma8=0.75)
     θ_fid = np.array(
         [cosmo_params.Omega_c, 
          cosmo_params.sigma8], 
@@ -685,7 +700,7 @@ as
 
 .. code:: ipython3
 
-    def P(k, A=0.85, B=0.75):
+    def P(k, A=0.40, B=0.75):
         cosmo_params = jc.Planck15(Omega_c=A, sigma8=B)
         return jc.power.linear_matter_power(cosmo_params, k)
 
@@ -697,10 +712,11 @@ as
         shape=shape,
         vol_norm=True,
         N_scale=False,
-        squeeze=True)
+        squeeze=True,
+        log_normal=True)
 
 Since our lognormal field simulator *and* power spectra code are
-differentiable via ``JAX``, we can simulate a *differentiable* universe.
+differentiable via ``Jax``, we can simulate a *differentiable* universe.
 We’ll pull out a nice function to visualize fiducial example data and
 its derivatives with respect to the cosmological parameters.
 
@@ -710,26 +726,29 @@ its derivatives with respect to the cosmological parameters.
     
     simulation, simulation_gradient = value_and_jacfwd(
         simulator, argnums=1)(
-        rng, θ_fid, simulator_args=simulator_args, log_normal=True)
+        rng, θ_fid, simulator_args=simulator_args)
 
 .. code:: ipython3
 
     from mpl_toolkits.axes_grid1 import make_axes_locatable
     fig,ax = plt.subplots(nrows=1, ncols=3, figsize=(12,15))
     
-    im1 = ax[0].imshow(np.squeeze(simulation), extent=(0,1,0,1))
+    im1 = ax[0].imshow(np.squeeze(simulation), 
+                       extent=(0, 1, 0, 1))
     ax[0].title.set_text(r'example fiducial $\rm d$')
     divider = make_axes_locatable(ax[0])
     cax = divider.append_axes('right', size='5%', pad=0.05)
     fig.colorbar(im1, cax=cax, orientation='vertical')
     
-    im1 = ax[1].imshow(np.squeeze(simulation_gradient).T[0].T, extent=(0,1,0,1))
+    im1 = ax[1].imshow(np.squeeze(simulation_gradient).T[0].T, 
+                       extent=(0, 1, 0, 1))
     ax[1].title.set_text(r'$\nabla_{\Omega_m} \rm d$')
     divider = make_axes_locatable(ax[1])
     cax = divider.append_axes('right', size='5%', pad=0.05)
     fig.colorbar(im1, cax=cax, orientation='vertical')
     
-    im1 = ax[2].imshow(np.squeeze(simulation_gradient).T[1].T, extent=(0,1,0,1))
+    im1 = ax[2].imshow(np.squeeze(simulation_gradient).T[1].T, 
+                       extent=(0, 1, 0, 1))
     ax[2].title.set_text(r'$\nabla_{\sigma_8} \rm d$')
     divider = make_axes_locatable(ax[2])
     cax = divider.append_axes('right', size='5%', pad=0.05)
@@ -744,8 +763,8 @@ its derivatives with respect to the cosmological parameters.
 .. image:: output_54_0.png
 
 
-We’ll now make the target universe that we observe a little more
-realistic with :math:`\Omega_c=0.35` and :math:`\sigma_8=0.8`
+We’ll now make the target universe that we observe generated with
+realistic parameters - :math:`\Omega_c=0.35` and :math:`\sigma_8=0.8`
 
 .. code:: ipython3
 
@@ -754,7 +773,7 @@ realistic with :math:`\Omega_c=0.35` and :math:`\sigma_8=0.8`
     rng, key = jax.random.split(rng)
     δ_target = simulator(
         key, θ_target, simulator_args=simulator_args, 
-        log_normal=True)
+    )
     plt.imshow(δ_target)
     plt.colorbar();
 
@@ -781,8 +800,7 @@ We can now train an IMNN as before
             simulator=lambda rng, θ: simulator(
                 rng, θ, 
                 simulator_args={**simulator_args, 
-                                **{"squeeze": False}}, 
-                log_normal=True))
+                                **{"squeeze": False}}))
 
 
 .. parsed-literal::
@@ -792,9 +810,16 @@ We can now train an IMNN as before
 
 .. code:: ipython3
 
+    %%time
     rng, key = jax.random.split(rng)
-    IMNN.fit(λ=10., ϵ=0.1, rng=key, print_rate=None, 
-             min_iterations=500, best=False)
+    IMNN.fit(λ=10., ϵ=0.1, rng=key, print_rate=None, min_iterations=500, best=False)
+
+
+.. parsed-literal::
+
+    CPU times: user 19min 21s, sys: 3min 38s, total: 23min
+    Wall time: 23min 6s
+
 
 .. code:: ipython3
 
@@ -812,17 +837,16 @@ distribution
 
     prior = tfp.distributions.Blockwise(
         [tfp.distributions.Uniform(low=low, high=high)
-         for low, high in zip([0.1, 0.1], [1., 1.25])])
+         for low, high in zip([0., 0.], [1.5, 1.5])])
     prior.low = np.array([0., 0.])
-    prior.high = np.array([1., 1.25])
+    prior.high = np.array([1.5, 1.5])
 
 And make the Gaussian approximation using the Fisher information
 
 .. code:: ipython3
 
     GA = imnn.lfi.GaussianApproximation(
-        parameter_estimates=IMNN.get_estimate(
-            np.expand_dims(δ_target, (0, 1, 2))), 
+        parameter_estimates=IMNN.get_estimate(np.expand_dims(δ_target, (0, 1, 2))), 
         invF=np.expand_dims(np.linalg.inv(IMNN.F), 0), 
         prior=prior, 
         gridsize=100)
@@ -834,11 +858,7 @@ And then run the ABC
     ABC = imnn.lfi.ApproximateBayesianComputation(
         target_data=np.expand_dims(δ_target, (0, 1, 2)),
         prior=prior,
-        simulator=lambda rng, θ: simulator(
-            rng, θ, 
-            simulator_args={**simulator_args, 
-                            **{'squeeze':False}}, 
-            log_normal=True),
+        simulator=lambda rng, θ: simulator(rng, θ, simulator_args={**simulator_args, **{'squeeze':False}}),
         compressor=IMNN.get_estimate,
         gridsize=100, 
         F=np.expand_dims(IMNN.F, 0))
@@ -846,8 +866,8 @@ And then run the ABC
 .. code:: ipython3
 
     rng, key = jax.random.split(rng)
-    ABC(ϵ=27., rng=key, n_samples=2000, min_accepted=1000, 
-        smoothing=1, max_iterations=20000);
+    ABC(ϵ=0.1, rng=key, n_samples=10000, min_accepted=1000, 
+        smoothing=1., max_iterations=5000);
 
 And then we can plot the constraints obtained using the IMNN and LFI
 
@@ -862,3 +882,8 @@ And then we can plot the constraints obtained using the IMNN and LFI
         ax=ax,
         label="Approximate Bayesian computation",
         colours="C2");
+
+
+
+.. image:: output_69_0.png
+
