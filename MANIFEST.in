@@ -1,4 +1,4 @@
-**.ipynb
-**.rst
-**.png
-**.svg
+recursive-include examples *.ipynb
+recursive-include docs *.rst *.py
+recursive-include docs/_images *.png
+recursive-include docs/_images *.svg
