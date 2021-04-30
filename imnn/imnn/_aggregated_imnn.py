@@ -26,7 +26,7 @@ class _AggregatedIMNN:
     .. math::
         \\Lambda = -\\log|\\bf{F}| + r(\\Lambda_2) \\Lambda_2
 
-    (See :doc:`/pages/theory`) can be calculated and its gradient with respect
+    (See :doc:`/pages/details`) can be calculated and its gradient with respect
     to these summaries, :math:`\\frac{\\partial\\Lambda}{\\partial x_i^j}` and
     derivatives :math:`\\frac{\\partial\\Lambda}{\\partial\\partial{x_i^j}/
     \\partial\\theta_\\alpha}` calculated, where :math:`i` labels the network
@@ -43,10 +43,11 @@ class _AggregatedIMNN:
 
     .. math::
         \\frac{\\partial\\Lambda}{\\partial{w_{ab}^l}} = \\frac{\\partial
-        \\Lambda}{\partial{x_i^j}}\\frac{\\partial{x_i^j}}{\\partial{w_{ab}^l}}
-        + \\frac{\\partial\\Lambda}{\partial\\partial{x_i^j}/\\partial
-        \\theta_\\alpha}\\frac{\\partial\\partial{x_i^j}/\\partial
-        \\theta_\\alpha}{\\partial{w_{ab}^l}}
+        \\Lambda}{\\partial{x_i^j}}\\frac{\\partial{x_i^j}}
+        {\\partial{w_{ab}^l}} + \\frac{\\partial\\Lambda}
+        {\\partial\\partial{x_i^j}/\\partial\\theta_\\alpha}
+        \\frac{\\partial\\partial{x_i^j}/\\partial\\theta_\\alpha}
+        {\\partial{w_{ab}^l}}
 
     Note that we keep the memory use low because only ``n_per_device``
     simulations are handled at once before being summed into a single gradient

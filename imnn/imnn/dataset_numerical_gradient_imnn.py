@@ -43,7 +43,8 @@ class DatasetNumericalGradientIMNN(AggregatedNumericalGradientIMNN):
     :math:`\\partial{{\\bf x}^i}/\\partial\\theta_\\alpha` the covariance
 
     .. math::
-        C_{ab} = \\frac{1}{n_s-1}\sum_{i=1}^{n_s}(x^i_a-\mu^i_a)(x^i_b-\mu^i_b)
+        C_{ab} = \\frac{1}{n_s-1}\\sum_{i=1}^{n_s}(x^i_a-\\mu^i_a)
+        (x^i_b-\\mu^i_b)
 
     and the derivative of the mean of the network outputs with respect to the
     model parameters
@@ -332,8 +333,7 @@ class DatasetNumericalGradientIMNN(AggregatedNumericalGradientIMNN):
                     generator,
                     "tmp",
                     "fiducial",
-                    n_s,
-                    n_per_device),
+                    n_s),
                 tf.float32
                 ).take(n_s // n_devices
                 ).batch(n_per_device
@@ -413,28 +413,31 @@ class DatasetNumericalGradientIMNN(AggregatedNumericalGradientIMNN):
                     sorted(glob.glob("tmp/fiducial_*.tfrecords")),
                     num_parallel_reads=1
                 ).map(writer.parser
+                ).skip(i * n_s // n_devices
                 ).take(n_s // n_devices
                 ).batch(n_per_device
                 ).repeat(
                 ).as_numpy_iterator()
-            for _ in range(n_devices)]
+            for i in range(n_devices)]
 
         numerical_derivative = [
             tf.data.TFRecordDataset(
                     sorted(glob.glob("tmp/numerical_derivative_*.tfrecords")),
                     num_parallel_reads=1
                 ).map(writer.parser
+                ).skip(i * 2 * n_params * n_d // n_devices
                 ).take(2 * n_params * n_d // n_devices
                 ).batch(n_per_device
                 ).repeat(
                 ).as_numpy_iterator()
-            for _ in range(n_devices)]
+            for i in range(n_devices)]
 
         validation_fiducial = [
             tf.data.TFRecordDataset(
                     sorted(glob.glob("tmp/validation_fiducial_*.tfrecords")),
                     num_parallel_reads=1
                 ).map(writer.parser
+                ).skip(i * n_s // n_devices
                 ).take(n_s // n_devices
                 ).batch(n_per_device
                 ).repeat(
@@ -447,6 +450,7 @@ class DatasetNumericalGradientIMNN(AggregatedNumericalGradientIMNN):
                         "tmp/validation_numerical_derivative_*.tfrecords")),
                     num_parallel_reads=1
                 ).map(writer.parser
+                ).skip(i * 2 * n_params * n_d // n_devices
                 ).take(2 * n_params * n_d // n_devices
                 ).batch(n_per_device
                 ).repeat(

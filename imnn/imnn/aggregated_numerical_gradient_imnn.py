@@ -48,7 +48,8 @@ class AggregatedNumericalGradientIMNN(_AggregatedIMNN, NumericalGradientIMNN):
     :math:`\\partial{{\\bf x}^i}/\\partial\\theta_\\alpha` the covariance
 
     .. math::
-        C_{ab} = \\frac{1}{n_s-1}\sum_{i=1}^{n_s}(x^i_a-\mu^i_a)(x^i_b-\mu^i_b)
+        C_{ab} = \\frac{1}{n_s-1}\\sum_{i=1}^{n_s}(x^i_a-\\mu^i_a)
+        (x^i_b-\\mu^i_b)
 
     and the derivative of the mean of the network outputs with respect to the
     model parameters
@@ -381,12 +382,12 @@ class AggregatedNumericalGradientIMNN(_AggregatedIMNN, NumericalGradientIMNN):
                 device=device)
             for device in self.devices]
 
-    def get_summary(self, input, w, θ, derivative=False, gradient=False):
+    def get_summary(self, inputs, w, θ, derivative=False, gradient=False):
         """ Returns a single summary of a simulation or its gradient
 
         Parameters
         ----------
-        input : float(input_shape) or tuple
+        inputs : float(input_shape) or tuple
             A single simulation to pass through the network or a tuple of
                 - **dΛ_dx** *float(input_shape, n_params)* -- the derivative of
                   the loss function with respect to a network summary
@@ -421,11 +422,11 @@ class AggregatedNumericalGradientIMNN(_AggregatedIMNN, NumericalGradientIMNN):
             """
             return self.model(w, d)
         if gradient:
-            dΛ_dx, d = input
+            dΛ_dx, d = inputs
             dx_dw = jacrev(fn, argnums=1)(d, w)
             return self._construct_gradient(dx_dw, aux=dΛ_dx, func="einsum")
         else:
-            return fn(input, w)
+            return fn(inputs, w)
 
     def _collect_input(self, key, validate=False):
         """ Returns validation or fitting sets
@@ -583,7 +584,7 @@ class AggregatedNumericalGradientIMNN(_AggregatedIMNN, NumericalGradientIMNN):
             parameters calculated by aggregating
         """
         dΛ_dx, dΛ_dx_mp = self._split_dΛ_dx(dΛ_dx)
-        d, d_mp = self._collect_input(None, validate=False)
+        d, d_mp = self._collect_input(key, validate=False)
 
         gradient = [
             jax.jit(

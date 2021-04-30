@@ -410,6 +410,30 @@ def _check_state(state):
 
 
 def _check_simulator(simulator):
+    """Checks that the simulator is callable and takes just two parameters
+
+    For the simulator to be functional within the IMNN it must have a specific
+    form where it takes a random number and a set of parameter values and
+    returns a simulation generated at those parameter values.
+
+    Parameters
+    ----------
+    simulator: any
+        the simulator to be checked
+
+    Returns
+    -------
+    fn:
+        the simulator function
+
+    Raises
+    ------
+    ValueError
+        if simlator is None or it is a function which takes the wrong number of
+        parameters
+    TypeError
+        if simulator is not a callable function
+    """
     if simulator is None:
         raise ValueError("`simulator` is None")
     elif not callable(simulator):
@@ -423,6 +447,32 @@ def _check_simulator(simulator):
 
 
 def _check_splitting(size, name, n_devices, n_per_device):
+    """Checks whether integers are exactly divisible by two other integers
+
+    To be able to run the aggregated IMNNs, datasets have to be reshaped across
+    different devices. Since ``n_s`` and ``n_d`` are known and fixed, it is
+    possible to check that the reshaping can be done and return an error if the
+    splitting is not possible.
+
+    Parameters
+    ----------
+    size: int
+        The number (of simulations) to be split over devices
+    name: str
+        The variable quantity name for flagging the error
+    n_devices: int
+        One of the numbers to be divided by (ostensibly the number of jax
+        devices available to be aggregated over)
+    n_per_device: int
+        The other number to be divided by (the number of simulations to run in
+        a batch on each device)
+
+    Raises
+    ------
+    ValueError
+        if the number of simulations is not exactly divisible by the number of
+        devices and the number within a batch
+    """
     if (size / (n_devices * n_per_device)
             != float(size // (n_devices * n_per_device))):
         raise ValueError(f"`{name}` of {size} will not split evenly between " +
@@ -431,6 +481,25 @@ def _check_splitting(size, name, n_devices, n_per_device):
 
 
 def _check_statistics_set(invF, dμ_dθ, invC, μ):
+    """Checks that quantities needed for IMNN score compression are assigned
+
+    Parameters
+    ----------
+    invF: float(n_params, n_params) or None
+        The inverse of the Fisher information matrix
+    dμ_dθ: float(n_summaries, n_params) or None
+        The derivative of the mean of the network outputs with respect to model
+        parameters
+    invC: float(n_summaries, n_summaries) or None
+        The inverse of the covariance of the network outputs
+    μ: float(n_summaries) or None
+        The mean of the network outputs
+
+    Raises
+    ------
+    ValueError
+        if any of the inputs are None
+    """
     if (invF is None) or (dμ_dθ is None) or (invC is None) or (μ is None):
         raise ValueError(
             "Fisher information has not yet been calculated. Please run " +
@@ -440,22 +509,26 @@ def _check_statistics_set(invF, dμ_dθ, invC, μ):
             "simulating on the fly.")
 
 
-def get_gridsize(gridsize, size):
-    if type(gridsize) == int:
-        gridsize = [gridsize for i in range(size)]
-    elif type(gridsize) == list:
-        if len(gridsize) == size:
-            gridsize = gridsize
-        else:
-            raise ValueError(
-                f"`gridsize` is a list of length {len(gridsize)} but " +
-                f"`shape` determined by `input` is {size}")
-    else:
-        raise TypeError("`gridsize` is not a list or an integer")
-    return gridsize
-
-
 def add_nested_pytrees(*pytrees):
+    """Sums together any number of identically shaped pytrees
+
+    All pytrees are flattened then summed and then reshaped back into their
+    tree
+
+    Parameters
+    ----------
+    pytrees: any number of pytrees
+        the pytrees to be summed together
+
+    Returns
+    -------
+    pytree:
+        the single pytree resulting from summing together all input pytrees
+
+    Todo
+    ----
+    No checking for identical shape is done, although it should be done really
+    """
     value_flat, value_tree = tree_flatten(pytrees[0])
     for pytree in pytrees[1:]:
         next_value_flat, _ = tree_flatten(pytree)

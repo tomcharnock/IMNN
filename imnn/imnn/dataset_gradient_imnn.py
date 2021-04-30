@@ -25,7 +25,8 @@ class DatasetGradientIMNN(AggregatedGradientIMNN):
     :math:`\\partial{{\\bf x}^i}/\\partial\\theta_\\alpha` the covariance
 
     .. math::
-        C_{ab} = \\frac{1}{n_s-1}\sum_{i=1}^{n_s}(x^i_a-\mu^i_a)(x^i_b-\mu^i_b)
+        C_{ab} = \\frac{1}{n_s-1}\\sum_{i=1}^{n_s}(x^i_a-\\mu^i_a)
+        (x^i_b-\\mu^i_b)
 
     and the derivative of the mean of the network outputs with respect to the
     model parameters
@@ -327,13 +328,15 @@ class DatasetGradientIMNN(AggregatedGradientIMNN):
                      partial(
                          generator,
                          "tmp",
-                         "fiducial"),
+                         "fiducial",
+                         n_d),
                      tf.float32),
                 tf.data.Dataset.from_generator(
                      partial(
                          generator,
                          "tmp",
-                         "derivative"),
+                         "derivative",
+                         n_d),
                      tf.float32))
                 ).take(n_d // n_devices
                 ).batch(n_per_device
@@ -410,11 +413,18 @@ class DatasetGradientIMNN(AggregatedGradientIMNN):
 
     .. code-block:: python
 
+        fiducial = [
+            tf.data.TFRecordDataset(
+                    sorted(glob.glob("tmp/fiducial_*.tfrecords")),
+                    num_parallel_reads=1
+                ).map(writer.parser
+                ).skip(i * n_s // n_devices
+                ).take(n_s // n_devices)
+            for i in range(n_devices)]
+
         main = [
             tf.data.Dataset.zip((
-                tf.data.TFRecordDataset(
-                    sorted(glob.glob("tmp/fiducial_*.tfrecords")),
-                    num_parallel_reads=1).map(writer.parser),
+                fiducial[i],
                 tf.data.TFRecordDataset(
                     sorted(glob.glob("tmp/derivative_*.tfrecords")),
                     num_parallel_reads=1).map(
@@ -424,23 +434,28 @@ class DatasetGradientIMNN(AggregatedGradientIMNN):
                 ).batch(n_per_device
                 ).repeat(
                 ).as_numpy_iterator()
-            for _ in range(n_devices)]
+            for i in range(n_devices)]
 
         remaining = [
-            tf.data.TFRecordDataset(
-                    sorted(glob.glob("tmp/remaining_*.tfrecords")),
-                    num_parallel_reads=1).map(writer.parser
+            fiducial[i].skip(n_d // n_devices
                 ).take((n_s - n_d) // n_devices
                 ).batch(n_per_device
                 ).repeat(
                 ).as_numpy_iterator()
-            for _ in range(n_devices)]
+            for i in range(n_devices)]
+
+        validation_fiducial = [
+            tf.data.TFRecordDataset(
+                    sorted(glob.glob("tmp/validation_fiducial_*.tfrecords")),
+                    num_parallel_reads=1
+                ).map(writer.parser
+                ).skip(i * n_s // n_devices
+                ).take(n_s // n_devices)
+            for i in range(n_devices)]
 
         validation_main = [
             tf.data.Dataset.zip((
-                tf.data.TFRecordDataset(
-                    sorted(glob.glob("tmp/validation_fiducial_*.tfrecords")),
-                    num_parallel_reads=1).map(writer.parser),
+                validation_fiducial[i],
                 tf.data.TFRecordDataset(
                     sorted(glob.glob("tmp/validation_derivative_*.tfrecords")),
                     num_parallel_reads=1).map(
@@ -450,17 +465,15 @@ class DatasetGradientIMNN(AggregatedGradientIMNN):
                 ).batch(n_per_device
                 ).repeat(
                 ).as_numpy_iterator()
-            for _ in range(n_devices)]
+            for i in range(n_devices)]
 
         validation_remaining = [
-            tf.data.TFRecordDataset(
-                    sorted(glob.glob("tmp/validation_remaining_*.tfrecords")),
-                    num_parallel_reads=1).map(writer.parser
+            validation_fiducial[i].skip(n_d // n_devices
                 ).take((n_s - n_d) // n_devices
                 ).batch(n_per_device
                 ).repeat(
                 ).as_numpy_iterator()
-            for _ in range(n_devices)]
+            for i in range(n_devices)]
 
     Parameters
     ----------

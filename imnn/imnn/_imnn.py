@@ -31,8 +31,8 @@ class _IMNN:
     :math:`\\partial{{\\bf x}^i}/\\partial\\theta_\\alpha` the covariance
 
     .. math::
-        C_{ab} = \\frac{1}{n_s-1}\\sum_{i=1}^{n_s}(x^i_a-\mu^i_a)
-        (x^i_b-\mu^i_b)
+        C_{ab} = \\frac{1}{n_s-1}\\sum_{i=1}^{n_s}(x^i_a-\\mu^i_a)
+        (x^i_b-\\mu^i_b)
 
     and the derivative of the mean of the network outputs with respect to the
     model parameters
@@ -1422,6 +1422,8 @@ class _IMNN:
         derivatives = self._construct_derivatives(derivatives)
         μ = np.mean(summaries, axis=0)
         C = np.cov(summaries, rowvar=False)
+        if self.n_summaries == 1:
+            C = np.array([[C]])
         invC = np.linalg.inv(C)
         dμ_dθ = np.mean(derivatives, axis=0)
         F = np.einsum("ij,ik,kl->jl", dμ_dθ, invC, dμ_dθ)
@@ -1594,7 +1596,7 @@ class _IMNN:
         .. math::
             \\hat{\\boldsymbol{\\theta}}_\\alpha=\\theta^{\\rm{fid}}_\\alpha+
             \\bf{F}^{-1}_{\\alpha\\beta}\\frac{\\partial\\mu_i}{\\partial
-            \\theta_\\beta}\\bf{C}^{-1}_{ij}(x(\\bf{w}, \\bf{d})-\mu)_j
+            \\theta_\\beta}\\bf{C}^{-1}_{ij}(x(\\bf{w}, \\bf{d})-\\mu)_j
 
         where :math:`x_j` is the :math:`j` output of the network with network
         parameters :math:`\\bf{w}` and input data :math:`\\bf{d}`.
@@ -1638,8 +1640,8 @@ class _IMNN:
 
         Note that batches of data can be summarised at once using
         ``get_estimate``. In this example we will draw 10 different values of μ
-        from between :math:`-10 < \mu < 10` and 10 different values of Σ from
-        between :math:`0 < \Sigma < 10` and generate a batch of 10 different
+        from between :math:`-10 < \\mu < 10` and 10 different values of Σ from
+        between :math:`0 < \\Sigma < 10` and generate a batch of 10 different
         input data which we can summarise using the IMNN.
 
         .. code-block:: python
