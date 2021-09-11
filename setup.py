@@ -6,7 +6,7 @@ with io.open("README.rst", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="IMNN",
-    version="0.3.0",
+    version="0.3.1",
     author="Tom Charnock",
     author_email="charnock@iap.fr",
     description="Using neural networks to extract sufficient statistics from \

@@ -11,7 +11,7 @@ from imnn.imnn.dataset_numerical_gradient_imnn import \
 from imnn.imnn.imnn import IMNN
 
 __author__ = "Tom Charnock"
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 
 __all__ = [
     "IMNN",
