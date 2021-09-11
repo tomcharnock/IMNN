@@ -1,8 +1,8 @@
 from typing import Callable, Union, Sequence
-from jax.api import _check_callable, _check_arg, vmap, _std_basis, \
+from jax._src.api import _check_callable, _check_arg, vmap, \
     _jvp, _check_input_dtype_jacfwd, _check_output_dtype_jacfwd, \
     _vjp, _check_input_dtype_jacrev, _check_output_dtype_jacrev, \
-    _unravel_array_into_pytree
+    _std_basis, _unravel_array_into_pytree
 from jax.api_util import argnums_partial, _ensure_index
 from jax.tree_util import tree_map, tree_structure, tree_transpose
 from jax._src.util import partial, wraps

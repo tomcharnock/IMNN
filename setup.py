@@ -5,7 +5,7 @@ with io.open("README.rst", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
 setuptools.setup(
-    name="imnn",
+    name="IMNN",
     version="0.3.0",
     author="Tom Charnock",
     author_email="charnock@iap.fr",
@@ -22,7 +22,7 @@ setuptools.setup(
     ],
     python_requires=">=3.6",
     install_requires=[
-        "jax>=0.2.10",
+        "jax>=0.2.13",
         "jaxlib>=0.1.62",
         "tensorflow",
         "tqdm>=4.48.2",
