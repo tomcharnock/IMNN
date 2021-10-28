@@ -123,8 +123,8 @@ class defaultTests:
 
     def array_type_exception(self, variable, input_variable, kwargs):
         if not isinstance(
-            input_variable,
-            (np.ndarray, jax.interpreters.xla._DeviceArray, onp.ndarray)):
+                input_variable,
+                (np.ndarray, jax.interpreters.xla._DeviceArray, onp.ndarray)):
             kwargs[variable] = input_variable
             with pytest.raises(TypeError) as info:
                 self.imnn(**kwargs)
@@ -165,8 +165,8 @@ class defaultTests:
 
     def state_type_exception(self, input_variable):
         if isinstance(
-            input_variable,
-            (jax.interpreters.xla.device_array, np.ndarray, onp.ndarray)):
+                input_variable,
+                (jax.interpreters.xla.device_array, np.ndarray, onp.ndarray)):
             if input_variable.shape == (2,):
                 return True
         if isinstance(input_variable,
@@ -377,8 +377,8 @@ class defaultTests:
 
     def rng_fit_type_exception(self, input_variable, kwargs, fit_kwargs):
         if not isinstance(
-            input_variable,
-            (jax.interpreters.xla._DeviceArray, np.ndarray, onp.ndarray)):
+                input_variable,
+                (jax.interpreters.xla._DeviceArray, np.ndarray, onp.ndarray)):
             fit_kwargs["rng"] = input_variable
             λ = fit_kwargs.pop("λ")
             ϵ = fit_kwargs.pop("ϵ")
