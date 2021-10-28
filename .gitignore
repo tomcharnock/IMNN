@@ -9,3 +9,5 @@ dist/
 *.tfrecords
 *.pdf
 *~
+py_imnn/
+junitxml

@@ -2,8 +2,8 @@ from typing import Callable, Union, Sequence
 from jax._src.api import _check_callable, _check_arg, vmap, \
     _jvp, _check_input_dtype_jacfwd, _check_output_dtype_jacfwd, \
     _vjp, _check_input_dtype_jacrev, _check_output_dtype_jacrev, \
-    _std_basis, _unravel_array_into_pytree
-from jax.api_util import argnums_partial, _ensure_index
+    _std_basis, _jacfwd_unravel, _jacrev_unravel
+from jax._src.api_util import argnums_partial, _ensure_index
 from jax.tree_util import tree_map, tree_structure, tree_transpose
 from jax._src.util import partial, wraps
 from jax._src.traceback_util import api_boundary
@@ -75,8 +75,7 @@ def value_and_jacfwd(fun: Callable, argnums: Union[int, Sequence[int]] = 0,
   For example:
 
   >>> import jax
-  >>> import jax.numpy as jnp
-  >>>
+  >>> import jax.numpy as jnpNon-hashable static arguments are not supported, as this can lead to unexpected cache-misses.
   >>> def f(x):
   ...   return jnp.asarray(
   ...     [x[0], 5*x[2], 4*x[1]**2 - 2*x[2], x[2] * jnp.sin(x[0])])
@@ -101,13 +100,13 @@ def value_and_jacfwd(fun: Callable, argnums: Union[int, Sequence[int]] = 0,
   @api_boundary
   def value_and_jacfwd_f(*args, **kwargs):
     f = lu.wrap_init(fun, kwargs)
-    f_partial, dyn_args = argnums_partial(f, argnums, args)
+    f_partial, dyn_args = argnums_partial(f, argnums, args, require_static_args_hashable=False)
     tree_map(partial(_check_input_dtype_jacfwd, holomorphic), dyn_args)
     pushfwd = partial(_jvp, f_partial, dyn_args)
     y, jac = vmap(pushfwd, out_axes=(None, -1))(_std_basis(dyn_args))
     tree_map(partial(_check_output_dtype_jacfwd, holomorphic), y)
     example_args = dyn_args[0] if isinstance(argnums, int) else dyn_args
-    return y, tree_map(partial(_unravel_array_into_pytree, example_args, -1), jac)
+    return y, tree_map(partial(_jacfwd_unravel, example_args), y, jac)
 
   return value_and_jacfwd_f
 
@@ -246,7 +245,7 @@ def value_and_jacrev(fun: Callable, argnums: Union[int, Sequence[int]] = 0,
   @api_boundary
   def value_and_jacrev_f(*args, **kwargs):
     f = lu.wrap_init(fun, kwargs)
-    f_partial, dyn_args = argnums_partial(f, argnums, args)
+    f_partial, dyn_args = argnums_partial(f, argnums, args, require_static_args_hashable=False)
     tree_map(partial(_check_input_dtype_jacrev, holomorphic, allow_int), dyn_args)
     if not has_aux:
       y, pullback = _vjp(f_partial, *dyn_args)
@@ -256,11 +255,11 @@ def value_and_jacrev(fun: Callable, argnums: Union[int, Sequence[int]] = 0,
     jac = vmap(pullback)(_std_basis(y))
     jac = jac[0] if isinstance(argnums, int) else jac
     example_args = dyn_args[0] if isinstance(argnums, int) else dyn_args
-    jac = tree_map(partial(_unravel_array_into_pytree, y, 0), jac)
+    jac_tree = tree_map(partial(_jacrev_unravel, y), example_args, jac)
     if not has_aux:
-      return y, tree_transpose(tree_structure(example_args), tree_structure(y), jac)
+      return y, tree_transpose(tree_structure(example_args), tree_structure(y), jac_tree)
     else:
-      return (y, aux), tree_transpose(tree_structure(example_args), tree_structure(y), jac)
+      return (y, aux), tree_transpose(tree_structure(example_args), tree_structure(y), jac_tree)
     return
 
   return value_and_jacrev_f

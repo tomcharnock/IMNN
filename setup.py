@@ -6,7 +6,7 @@ with io.open("README.rst", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="IMNN",
-    version="0.3.1",
+    version="0.3.2",
     author="Tom Charnock",
     author_email="charnock@iap.fr",
     description="Using neural networks to extract sufficient statistics from \
@@ -22,8 +22,8 @@ setuptools.setup(
     ],
     python_requires=">=3.6",
     install_requires=[
-        "jax>=0.2.13",
-        "jaxlib>=0.1.62",
+        "jax>=0.2.24",
+        "jaxlib>=0.1.73",
         "tensorflow",
         "tqdm>=4.48.2",
         "tensorflow-probability[jax]",

@@ -5,7 +5,7 @@ from imnn.imnn import IMNN, SimulatorIMNN, AggregatedSimulatorIMNN, \
 from imnn.utils import TFRecords
 
 __author__ = "Tom Charnock"
-__version__ = "0.3.1"
+__version__ = "0.3.2"
 
 __all__ = [
     "IMNN",

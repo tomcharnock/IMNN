@@ -5,7 +5,7 @@ from imnn.lfi.approximate_bayesian_computation import \
 from imnn.lfi.population_monte_carlo import PopulationMonteCarlo
 
 __author__ = "Tom Charnock"
-__version__ = "0.3.1"
+__version__ = "0.3.2"
 
 __all__ = [
     "LikelihoodFreeInference",

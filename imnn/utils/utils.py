@@ -2,6 +2,7 @@ import inspect
 import jax
 import jaxlib
 import jax.numpy as np
+import numpy as onp
 from jax.tree_util import tree_flatten, tree_unflatten
 
 
@@ -134,7 +135,7 @@ def _check_input(input, shape, name, allow_None=False):
     elif (input is None) and allow_None:
         return input
     elif not isinstance(
-            input, (jax.interpreters.xla.device_array, np.ndarray)):
+            input, (jax.interpreters.xla.device_array, np.ndarray, onp.ndarray)):
         raise TypeError(f"`{name}` must be a jax array")
     else:
         if input.shape != shape:
@@ -396,7 +397,7 @@ def _check_state(state):
     string = "`state` not a jax optimiser state - attempting to use it anyway"
     if (state is None):
         raise ValueError("`key_or_state` is None")
-    elif isinstance(state, (jax.interpreters.xla.device_array, np.ndarray)):
+    elif isinstance(state, (jax.interpreters.xla.device_array, np.ndarray, onp.ndarray)):
         if state.shape == (2,):
             return None, state
         else:

@@ -647,7 +647,7 @@ and maybe also
       author = {Tom Charnock},
       title = {{IMNN}: Information maximising neural networks},
       url = {http://bitbucket.org/tomcharnock/imnn},
-      version = {0.3.0},
+      version = {0.3.2},
       year = {2021},
     }
 
