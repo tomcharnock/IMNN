@@ -5,7 +5,7 @@ The IMNN can be install by cloning the repository and installing via python or b
 
 .. code-block::
 
-    git clone https://bitbucket.org/tomcharnock/imnn.git
+    git clone https://github.com/InformationMaximisingNeuralNetworks/imnn.git
     cd imnn
     python setup.py install
 
@@ -32,7 +32,7 @@ The previous version of the IMNN is still available (and works well) built on a 
 
 .. code-block::
 
-    git clone https://bitbucket.org/tomcharnock/imnn-tf.git
+    git clone https://github.com/InformationMaximisingNeuralNetworks/imnn-tf.git
     cd imnn-tf
     python setup.py install
 

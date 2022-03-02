@@ -1,7 +1,7 @@
 IMNN: Information maximising neural networks
 ============================================
 
-|doc| |pypi| |bit| |git| |doi| |zen|
+|doc| |git| |pypi| |bit| |doi| |zen|
 
 The IMNN is a statistical method for transformation and compression of data from complex, high-dimensional distributions down to the number of physical parameters in the model which generates that data. It is asymptotically lossless in terms of information about the physical parameters. The method uses neural networks as a backbone for the transformation although any parameterised transformation with enough flexibility to map the data could be used.
 
@@ -377,7 +377,7 @@ So for example to initialise an ``AggregatedSimulatorIMNN`` and train it we can 
     IMNN.fit(λ=10., ϵ=0.1, rng=key)
     IMNN.plot(expected_detF=50.)
 
-.. image:: https://bitbucket.org/tomcharnock/imnn/raw/master/docs/_images/history_plot.png
+.. image:: https://github.com/InformationMaximisingNeuralNetworks/imnn/raw/master/docs/_images/history_plot.png
 
 Or for a`` NumericalGradientIMNN``
 
@@ -578,7 +578,7 @@ The IMNN can be install by cloning the repository and installing via python or b
 
 .. code-block::
 
-    git clone https://bitbucket.org/tomcharnock/imnn.git
+    git clone https://github.com/InformationMaximisingNeuralNetworks/imnn.git
     cd imnn
     python setup.py install
 
@@ -605,7 +605,7 @@ The previous version of the IMNN is still available (and works well) built on a 
 
 .. code-block::
 
-    git clone https://bitbucket.org/tomcharnock/imnn-tf.git
+    git clone https://github.com/InformationMaximisingNeuralNetworks/imnn-tf.git
     cd imnn-tf
     python setup.py install
 
@@ -646,22 +646,22 @@ and maybe also
     @software{imnn2021,
       author = {Tom Charnock},
       title = {{IMNN}: Information maximising neural networks},
-      url = {http://bitbucket.org/tomcharnock/imnn},
+      url = {http://github.com/InformationMaximisingNeuralNetworks/imnn},
       version = {0.3.2},
       year = {2021},
     }
 
-.. |doc| image:: https://bitbucket.org/tomcharnock/imnn/raw/master/docs/_images/doc.svg
+.. |doc| image:: https://github.com/InformationMaximisingNeuralNetworks/imnn/raw/master/docs/_images/doc.svg
     :target: https://www.aquila-consortium.org/doc/imnn/
 
-.. |pypi| image:: https://bitbucket.org/tomcharnock/imnn/raw/master/docs/_images/pypi.svg
+.. |pypi| image:: https://github.com/InformationMaximisingNeuralNetworks/imnn/raw/master/docs/_images/pypi.svg
     :target: https://pypi.org/project/IMNN/
 
-.. |bit| image:: https://bitbucket.org/tomcharnock/imnn/raw/master/docs/_images/bit.svg
+.. |bit| image:: https://github.com/InformationMaximisingNeuralNetworks/imnn/raw/master/docs/_images/bit.svg
     :target: https://bitbucket.org/tomcharnock/imnn
 
-.. |git| image:: https://bitbucket.org/tomcharnock/imnn/raw/master/docs/_images/git.svg
-    :target: https://github.com/tomcharnock/imnn
+.. |git| image:: https://github.com/InformationMaximisingNeuralNetworks/imnn/raw/master/docs/_images/git.svg
+    :target: https://github.com/InformationMaximisingNeuralNetworks/imnn
 
 .. |doi| image:: https://zenodo.org/badge/DOI/10.1103/PhysRevD.97.083004.svg
    :target: https://doi.org/10.1103/PhysRevD.97.083004

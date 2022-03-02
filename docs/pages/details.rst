@@ -423,7 +423,7 @@ and maybe also
     @software{imnn2021,
       author = {Tom Charnock},
       title = {{IMNN}: Information maximising neural networks},
-      url = {http://bitbucket.org/tomcharnock/imnn},
-      version = {0.3.0},
+      url = {https://github.com/InformationMaximisingNeuralNetworks/imnn},
+      version = {0.3.2},
       year = {2021},
     }
