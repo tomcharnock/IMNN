@@ -1,9 +1,10 @@
 from typing import Callable, Union, Sequence
-from jax._src.api import _check_callable, _check_arg, vmap, \
+from jax._src.api import vmap, \
     _jvp, _check_input_dtype_jacfwd, _check_output_dtype_jacfwd, \
     _vjp, _check_input_dtype_jacrev, _check_output_dtype_jacrev, \
     _std_basis, _jacfwd_unravel, _jacrev_unravel
-from jax._src.api_util import argnums_partial, _ensure_index
+from jax._src import dispatch
+from jax._src.api_util import argnums_partial, _ensure_index, check_callable
 from jax.tree_util import tree_map, tree_structure, tree_transpose
 from jax._src.util import partial, wraps
 from jax._src.traceback_util import api_boundary
@@ -93,7 +94,7 @@ def value_and_jacfwd(fun: Callable, argnums: Union[int, Sequence[int]] = 0,
             "{fun} but returns a two-element tuple where the first element "
             "is the value of {fun} and the second element is the Jacobian.")
 
-  _check_callable(fun)
+  check_callable(fun)
   argnums = _ensure_index(argnums)
 
   @wraps(fun, docstr=docstr, argnums=argnums)
@@ -111,7 +112,7 @@ def value_and_jacfwd(fun: Callable, argnums: Union[int, Sequence[int]] = 0,
   return value_and_jacfwd_f
 
 def _check_input_dtype_jacfwd(holomorphic, x):
-  _check_arg(x)
+  dispatch.check_arg(x)
   aval = core.get_aval(x)
   if holomorphic:
     if not (dtypes.issubdtype(aval.dtype, np.complexfloating) and
@@ -239,7 +240,7 @@ def value_and_jacrev(fun: Callable, argnums: Union[int, Sequence[int]] = 0,
             "{fun} but returns a two-element tuple where the first element "
             "is the value of {fun} and the second element is the Jacobian.")
 
-  _check_callable(fun)
+  check_callable(fun)
 
   @wraps(fun, docstr=docstr, argnums=argnums)
   @api_boundary

@@ -1266,26 +1266,11 @@ class _IMNN:
         """
         F, C, invC, _Λ2, _r = inputs
         detF, detC, detinvC, Λ2, r = history
-        detF = jax.ops.index_update(
-            detF,
-            jax.ops.index[counter, ind],
-            np.linalg.det(F))
-        detC = jax.ops.index_update(
-            detC,
-            jax.ops.index[counter, ind],
-            np.linalg.det(C))
-        detinvC = jax.ops.index_update(
-            detinvC,
-            jax.ops.index[counter, ind],
-            np.linalg.det(invC))
-        Λ2 = jax.ops.index_update(
-            Λ2,
-            jax.ops.index[counter, ind],
-            _Λ2)
-        r = jax.ops.index_update(
-            r,
-            jax.ops.index[counter, ind],
-            _r)
+        detF = detF.at[counter, ind].set(np.linalg.det(F))
+        detC = detC.at[counter, ind].set(np.linalg.det(C))
+        detinvC = detinvC.at[counter, ind].set(np.linalg.det(invC))
+        Λ2 = Λ2.at[counter, ind].set(_Λ2)
+        r = r.at[counter, ind].set(_r)
         return detF, detC, detinvC, Λ2, r
 
     def _slogdet(self, matrix):
