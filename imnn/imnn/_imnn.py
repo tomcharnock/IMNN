@@ -524,7 +524,7 @@ class _IMNN:
             "val_detinvC": np.zeros((0,)),
             "val_Λ2": np.zeros((0,)),
             "val_r": np.zeros((0,)),
-            "max_detF": np.float32(0.)
+            "max_detF": 0.
         }
 
     def _set_history(self, results):
