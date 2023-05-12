@@ -136,7 +136,7 @@ def _check_input(input, shape, name, allow_None=False):
         return input
     elif not isinstance(
             input,
-            (jax.interpreters.xla.device_array, np.ndarray, onp.ndarray)):
+            (jax.Array, np.ndarray, onp.ndarray)):
         raise TypeError(f"`{name}` must be a jax array")
     else:
         if input.shape != shape:
@@ -215,12 +215,12 @@ def _check_host(host):
 
 
 def _check_model(model):
-    """Exception raising for ``jax.experimental.stax``-like model
+    """Exception raising for ``jax.example_libraries.stax``-like model
 
     Checks model is not ``None`` and if not checks that the input is  a tuple
     with two functions which take the correct number of inputs. For more
-    information see `jax.experimental.optimizers <https://jax.readthedocs.io/e
-    n/stable/jax.experimental.stax.html>`_.
+    information see `jax.example_libraries.optimizers <https://jax.readthedocs.io/e
+    n/stable/jax.example_libraries.stax.html>`_.
 
     Parameters
     ----------
@@ -293,15 +293,15 @@ def _check_model_output(output_shape, expected_shape):
 
 
 def _check_optimiser(optimiser):
-    """Exception raising for ``jax.experimental.optimizers``-like optimiser
+    """Exception raising for ``jax.example_libraries.optimizers``-like optimiser
 
     Checks optimiser is not ``None`` and if not checks that the input is a
-    ``jax.experimental.optimizers``-like instance. To allow more freedom on
+    ``jax.example_libraries.optimizers``-like instance. To allow more freedom on
     personal optimisers, if the optimiser is not an instance of a
-    ``jax.experimental.optimizers`` object then it checks that the optimiser is
+    ``jax.example_libraries.optimizers`` object then it checks that the optimiser is
     at least a tuple with three functions which take the correct number of
-    inputs. For more information see `jax.experimental.optimizers <https://jax.
-    readthedocs.io/en/stable/jax.experimental.optimizers.html>`_.
+    inputs. For more information see `jax.example_libraries.optimizers <https://jax.
+    readthedocs.io/en/stable/jax.example_libraries.optimizers.html>`_.
 
     Parameters
     ----------
@@ -310,8 +310,8 @@ def _check_optimiser(optimiser):
 
     Returns
     -------
-    tuple or jax.experimental.optimizers-like object
-        ``jax.experimental.optimizers``-like optimiser for initialising state,
+    tuple or jax.example_libraries.optimizers-like object
+        ``jax.example_libraries.optimizers``-like optimiser for initialising state,
         updating parameters and state and getting parameters from state
 
     Raises
@@ -320,7 +320,7 @@ def _check_optimiser(optimiser):
         If input is None
     ValueError
         If optimiser is not a tuple of functions or an instance of a
-        ``jax.experimental.optimizers`` object
+        ``jax.example_libraries.optimizers`` object
     ValueError
         If element functions do not require the correct number of inputs
     TypeError
@@ -333,7 +333,7 @@ def _check_optimiser(optimiser):
         "third to get parameters from the state."
     if optimiser is None:
         raise ValueError("`optimiser` is None")
-    if isinstance(optimiser, jax.experimental.optimizers.Optimizer):
+    if isinstance(optimiser, jax.example_libraries.optimizers.Optimizer):
         return optimiser
     else:
         try:
@@ -370,7 +370,7 @@ def _check_optimiser(optimiser):
 
 
 def _check_state(state):
-    """RNG and state checking for ``jax.experimental.optimizers``-like state
+    """RNG and state checking for ``jax.example_libraries.optimizers``-like state
 
     Checks state is not ``None`` and if not checks that the input is a random
     number generator or not. If the shape and type is correct for a random
@@ -387,7 +387,7 @@ def _check_state(state):
 
     Returns
     -------
-    None, int(2,) or ``jax.experimental.optimizers``-like state, None
+    None, int(2,) or ``jax.example_libraries.optimizers``-like state, None
         Returns either a random number generator or a state depending on input
 
     Raises
@@ -400,13 +400,13 @@ def _check_state(state):
         raise ValueError("`key_or_state` is None")
     elif isinstance(
             state,
-            (jax.interpreters.xla.device_array, np.ndarray, onp.ndarray)):
+            (jax.Array, np.ndarray, onp.ndarray)):
         if state.shape == (2,):
             return None, state
         else:
             print(string)
             return state, None
-    elif isinstance(state, jax.experimental.optimizers.OptimizerState):
+    elif isinstance(state, jax.example_libraries.optimizers.OptimizerState):
         return state, None
     else:
         print(string)

@@ -449,18 +449,9 @@ class ApproximateBayesianComputation(LikelihoodFreeInference):
                 np.arange(n_simulations * max_iterations),
                 [n_simulations * iteration],
                 [n_simulations])
-            parameters = jax.ops.index_update(
-                parameters,
-                jax.ops.index[indices],
-                parameter_samples)
-            summaries = jax.ops.index_update(
-                summaries,
-                jax.ops.index[indices],
-                summary_samples)
-            distances = jax.ops.index_update(
-                distances,
-                jax.ops.index[:, indices],
-                distance_samples)
+            parameters = parameters.at[indices].set(parameter_samples)
+            summaries = summaries.at[indices].set(summary_samples)
+            distances = distances.at[:, indices].set(distance_samples)
             n_accepted = np.int32(np.less(distances, ϵ).sum(1))
             return rng, parameters, summaries, distances, n_accepted, \
                 iteration + np.int32(1)
